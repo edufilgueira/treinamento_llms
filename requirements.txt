@@ -1,0 +1,26 @@
+# Treino local em CPU — LoRA com modelos causais pequenos
+# Instale com: pip install -r requirements.txt
+#
+# Não precisa de `gptqmodel` / `optimum` para este fluxo (LoRA em FP32). Se instalou
+# antes: pip uninstall gptqmodel optimum -y
+#
+# Outros pacotes opcionais / restos de experimentos (não listados abaixo) que podes
+# remover se reaparecerem: torchao, hf-transfer, kernels, TokeNicer, Device-SMI,
+# Defuser, LogBar, PyPcre — não são necessários para train_lora / inferir / merge.
+#
+# Modelos quantizados AWQ/GPTQ no Hub (ex.: TheBloke/*-AWQ) exigem pacotes extra:
+#   pip install -r requirements-quantized.txt
+
+torch>=2.1.0
+transformers>=4.40.0
+datasets>=2.18.0
+accelerate>=0.28.0
+peft>=0.11.0
+trl>=0.9.0
+sentencepiece>=0.2.0
+tiktoken>=0.7.0
+protobuf>=4.25.0
+
+# Servidor local do LoRA (server/serve_lora.py)
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
