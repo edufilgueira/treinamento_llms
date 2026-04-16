@@ -116,8 +116,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--lr", type=float, default=2e-4)
     p.add_argument("--batch_size", type=int, default=1)
     p.add_argument("--grad_accum", type=int, default=8)
-    p.add_argument(
-        "--max_seq_length",
+    p.add_argument("--max_seq_length",
         type=int,
         default=256,
         help="Comprimento máximo tokenizado. Em CPU com modelo ~3B, o script pode aplicar um teto "
@@ -125,14 +124,12 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--lora_r", type=int, default=8)
     p.add_argument("--lora_alpha", type=int, default=16)
-    p.add_argument(
-        "--no_gradient_checkpointing",
+    p.add_argument("--no_gradient_checkpointing",
         action="store_true",
         help="Desativa gradient checkpointing (mais RAM, pode ser um pouco mais rápido).",
     )
     p.add_argument("--trust_remote_code", action="store_true")
-    p.add_argument(
-        "--allow_large_model_on_cpu",
+    p.add_argument("--allow_large_model_on_cpu",
         action="store_true",
         help="Omite o aviso ao treinar modelos 3B+ só em CPU (o treino corre na mesma; "
         "isto só suprime a mensagem no stderr).",

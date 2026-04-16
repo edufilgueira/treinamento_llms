@@ -18,5 +18,5 @@ fi
 
 # Roda o treino
 # TRAIN_LORA_CPU_MAX_SEQ=96 python3 train_lora.py --train_file ./data/exemplo_treino.jsonl
-python3 train_lora.py --train_file ./data/exemplo_treino.jsonl
+python3 train_lora.py --max_seq_length 1024 --train_file ./data/exemplo_treino.jsonl
 
