@@ -137,7 +137,7 @@ class Message(BaseModel):
 
 class ChatIn(BaseModel):
     messages: list[Message] = Field(..., min_length=1)
-    max_new_tokens: int = Field(1024, ge=16, le=4096)
+    max_new_tokens: int = Field(2048, ge=16, le=4096)
     temperature: float = Field(0.7, ge=0.01, le=2.0)
     top_p: float = Field(0.9, ge=0.05, le=1.0)
 
