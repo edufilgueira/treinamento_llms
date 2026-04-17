@@ -33,9 +33,14 @@ Atalho com venv:
 ./server/serve.sh
 ```
 
-Na primeira execução vês na consola mensagens do tipo “A carregar modelo…”. Quando aparecer “Pronto”, abre o navegador em:
+Na primeira execução vês na consola mensagens do tipo “A carregar modelo…”. Quando aparecer “Pronto”, o servidor escuta por defeito em **`0.0.0.0`** (todas as interfaces):
 
-**http://127.0.0.1:8765/**
+- **Nesta máquina:** `http://127.0.0.1:8765/`
+- **Noutro PC ou telemóvel na mesma rede / VM na nuvem:** `http://IP-DO-SERVIDOR:8765/` (substitui pelo IP público ou privado do host)
+
+**Firewall / nuvem:** abre a porta escolhida (ex. **8765/tcp**) no *security group*, *ufw* ou painel do teu fornecedor, senão o browser noutra máquina não liga mesmo com `0.0.0.0`.
+
+**Só localhost** (não expor na rede): `python3 server/serve_lora.py --host 127.0.0.1`
 
 ## Interface no navegador
 
@@ -64,16 +69,18 @@ Podes forçar caminhos na linha de comando (ver abaixo).
 ## Opções da linha de comando
 
 ```text
-python3 server/serve_lora.py [--host 127.0.0.1] [--port 8765] \
+python3 server/serve_lora.py [--host 0.0.0.0] [--port 8765] \
   [--model_name ID_NO_HUB] \
   [--adapter_dir /caminho/para/lora_adapter] \
   [--merged_model_dir /caminho/para/merged_model] \
   [--trust_remote_code]
 ```
 
+**Padrão:** `--host 0.0.0.0` (acesso a partir de outras máquinas na rede, se o firewall permitir).
+
 Exemplos:
 
-- Ouvir na rede local (outros dispositivos na LAN): `--host 0.0.0.0`
+- **Só este PC:** `--host 127.0.0.1`
 - Outra porta: `--port 8080`
 - Modelo base diferente do `data_config.py`: `--model_name TinyLlama/TinyLlama-1.1B-Chat-v1.0`
 

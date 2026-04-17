@@ -7,7 +7,8 @@ Evita repetir o custo de carregar vários GB em cada execução de inferir.py.
   cd <raiz do projeto> && python3 server/serve_lora.py
   # ou: ./server/serve.sh
 
-Abre no navegador: http://127.0.0.1:8765/
+Por defeito escuta em 0.0.0.0 (todas as interfaces): aceda com http://IP-DO-SERVIDOR:8765/
+Nesta máquina: http://127.0.0.1:8765/ — só local: --host 127.0.0.1
 """
 
 from __future__ import annotations
@@ -57,7 +58,12 @@ _startup_args: argparse.Namespace | None = None
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Servidor local para o modelo LoRA treinado.")
-    p.add_argument("--host", default="127.0.0.1", help="Interface (padrão: só local).")
+    p.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="Endereço a escutar. 0.0.0.0 = todas as interfaces (outras máquinas na rede). "
+        "127.0.0.1 = só este computador.",
+    )
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--model_name", default=DEFAULT_MODEL_NAME)
     p.add_argument(
@@ -103,7 +109,14 @@ async def lifespan(app: FastAPI):
         print(f"Erro ao carregar: {err}", file=sys.stderr, flush=True)
         raise
     mode = "fundido" if merged else "base+LoRA"
-    print(f"Pronto ({mode}). Servidor em http://{args.host}:{args.port}/", flush=True)
+    if args.host in ("0.0.0.0", "::", "[::]"):
+        print(
+            f"Pronto ({mode}). À escuta em {args.host}:{args.port} — nesta máquina: "
+            f"http://127.0.0.1:{args.port}/ — noutro PC/rede: http://<IP>:{args.port}/",
+            flush=True,
+        )
+    else:
+        print(f"Pronto ({mode}). Servidor em http://{args.host}:{args.port}/", flush=True)
     _engine = {
         "tokenizer": tokenizer,
         "model": model,

@@ -1,6 +1,12 @@
 # Treino local em CPU — LoRA com modelos causais pequenos
 # Instale com: pip install -r requirements.txt
 #
+# Git (CLI) — não é pacote pip; instale no sistema operativo, por exemplo:
+#   Debian/Ubuntu: sudo apt update && sudo apt install -y git
+#   Fedora:        sudo dnf install -y git
+#   macOS:         brew install git
+#   apt update && sudo apt install -y git
+#   apt update && apt install -y git
 # Não precisa de `gptqmodel` / `optimum` para este fluxo (LoRA em FP32). Se instalou
 # antes: pip uninstall gptqmodel optimum -y
 #
