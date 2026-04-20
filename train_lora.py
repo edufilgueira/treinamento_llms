@@ -118,7 +118,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--grad_accum", type=int, default=8)
     p.add_argument("--max_seq_length",
         type=int,
-        default=256,
+        default=2048,
         help="Comprimento máximo tokenizado. Em CPU com modelo ~3B, o script pode aplicar um teto "
         "(variável TRAIN_LORA_CPU_MAX_SEQ, padrão 128) para evitar OOM — ver docstring do módulo.",
     )
