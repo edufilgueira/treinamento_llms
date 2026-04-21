@@ -24,6 +24,19 @@
   /** AbortController do pedido de streaming atual (novo chat, nova mensagem ou saída da página). */
   let streamAborter = null;
 
+  /** Bloco cuja ação “copiar” fica visível até outro botão copiar ser clicado. */
+  let copyPinnedStack = null;
+
+  function setCopyPinnedStack(stack) {
+    if (copyPinnedStack && copyPinnedStack !== stack) {
+      copyPinnedStack.classList.remove("msg-stack--copy-pinned");
+    }
+    copyPinnedStack = stack || null;
+    if (copyPinnedStack) {
+      copyPinnedStack.classList.add("msg-stack--copy-pinned");
+    }
+  }
+
   function abortStream() {
     if (streamAborter) {
       streamAborter.abort();
@@ -184,23 +197,35 @@
   const COPY_ICON_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
 
-  function bindCopyButton(btn, getText) {
+  const CHECK_ICON_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+
+  function bindCopyButton(btn, getText, stack) {
     btn.type = "button";
     btn.className = "msg__copy";
-    btn.setAttribute("aria-label", "Copiar texto");
-    btn.setAttribute("title", "Copiar");
+    btn.setAttribute("aria-label", "Copiar mensagem");
+    btn.setAttribute("data-tooltip", "Copiar mensagem");
     btn.innerHTML = COPY_ICON_SVG;
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const t = getText();
       if (!t) return;
+      setCopyPinnedStack(stack);
       navigator.clipboard.writeText(t).then(
         () => {
-          const prev = btn.getAttribute("aria-label");
+          if (btn._restoreIconTimer) {
+            window.clearTimeout(btn._restoreIconTimer);
+            btn._restoreIconTimer = null;
+          }
+          btn.classList.add("msg__copy--pulse-check");
+          btn.innerHTML = CHECK_ICON_SVG;
           btn.setAttribute("aria-label", "Copiado");
-          window.setTimeout(() => {
-            btn.setAttribute("aria-label", prev || "Copiar texto");
-          }, 1600);
+          btn._restoreIconTimer = window.setTimeout(() => {
+            btn._restoreIconTimer = null;
+            btn.classList.remove("msg__copy--pulse-check");
+            btn.innerHTML = COPY_ICON_SVG;
+            btn.setAttribute("aria-label", "Copiar mensagem");
+          }, 1000);
         },
         () => {}
       );
@@ -216,7 +241,7 @@
     textEl.className = "msg__text";
     textEl.textContent = content;
     const copyBtn = document.createElement("button");
-    bindCopyButton(copyBtn, () => textEl.textContent);
+    bindCopyButton(copyBtn, () => textEl.textContent, stack);
     bubble.appendChild(textEl);
     stack.appendChild(bubble);
     stack.appendChild(copyBtn);
@@ -233,7 +258,7 @@
     const textEl = document.createElement("span");
     textEl.className = "msg__text";
     const copyBtn = document.createElement("button");
-    bindCopyButton(copyBtn, () => textEl.textContent);
+    bindCopyButton(copyBtn, () => textEl.textContent, stack);
     bubble.appendChild(textEl);
     stack.appendChild(bubble);
     stack.appendChild(copyBtn);
@@ -245,6 +270,7 @@
 
   function clearChat() {
     abortStream();
+    setCopyPinnedStack(null);
     history.length = 0;
     logInner.innerHTML = "";
     inputEl.value = "";
