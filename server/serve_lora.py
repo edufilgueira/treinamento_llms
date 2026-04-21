@@ -40,6 +40,7 @@ if not os.environ.get("PYTORCH_ALLOC_CONF"):
     os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -129,6 +130,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Oráculo LoRA local", lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 class Message(BaseModel):
     role: str
@@ -207,6 +216,33 @@ async def index():
             status_code=500,
         )
     return FileResponse(index_path, media_type="text/html; charset=utf-8")
+
+
+def _file_response_or_404(path: Path, media_type: str) -> FileResponse:
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"{path.name} em falta.")
+    return FileResponse(path, media_type=media_type)
+
+
+@app.get("/app.css")
+async def serve_app_css():
+    """Raiz: o index em / usa href relativo app.css → /app.css."""
+    return _file_response_or_404(STATIC_DIR / "app.css", "text/css; charset=utf-8")
+
+
+@app.get("/app.js")
+async def serve_app_js():
+    return _file_response_or_404(STATIC_DIR / "app.js", "application/javascript; charset=utf-8")
+
+
+@app.get("/static/app.css")
+async def serve_app_css_legacy():
+    return _file_response_or_404(STATIC_DIR / "app.css", "text/css; charset=utf-8")
+
+
+@app.get("/static/app.js")
+async def serve_app_js_legacy():
+    return _file_response_or_404(STATIC_DIR / "app.js", "application/javascript; charset=utf-8")
 
 
 @app.get("/api/status")
