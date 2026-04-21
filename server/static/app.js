@@ -181,24 +181,66 @@
     el.scrollTop = el.scrollHeight;
   }
 
+  const COPY_ICON_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+
+  function bindCopyButton(btn, getText) {
+    btn.type = "button";
+    btn.className = "msg__copy";
+    btn.setAttribute("aria-label", "Copiar texto");
+    btn.setAttribute("title", "Copiar");
+    btn.innerHTML = COPY_ICON_SVG;
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const t = getText();
+      if (!t) return;
+      navigator.clipboard.writeText(t).then(
+        () => {
+          const prev = btn.getAttribute("aria-label");
+          btn.setAttribute("aria-label", "Copiado");
+          window.setTimeout(() => {
+            btn.setAttribute("aria-label", prev || "Copiar texto");
+          }, 1600);
+        },
+        () => {}
+      );
+    });
+  }
+
   function appendMessage(role, content) {
-    const div = document.createElement("div");
-    div.className = "msg " + role;
-    div.textContent = content;
-    logInner.appendChild(div);
+    const stack = document.createElement("div");
+    stack.className = "msg-stack msg-stack--user";
+    const bubble = document.createElement("div");
+    bubble.className = "msg " + role;
+    const textEl = document.createElement("span");
+    textEl.className = "msg__text";
+    textEl.textContent = content;
+    const copyBtn = document.createElement("button");
+    bindCopyButton(copyBtn, () => textEl.textContent);
+    bubble.appendChild(textEl);
+    stack.appendChild(bubble);
+    stack.appendChild(copyBtn);
+    logInner.appendChild(stack);
     updateEmptyState();
     scrollLog();
   }
 
   function appendAssistantStreaming() {
-    const div = document.createElement("div");
-    div.className = "msg assistant streaming";
+    const stack = document.createElement("div");
+    stack.className = "msg-stack msg-stack--assistant";
+    const bubble = document.createElement("div");
+    bubble.className = "msg assistant streaming";
     const textEl = document.createElement("span");
-    div.appendChild(textEl);
-    logInner.appendChild(div);
+    textEl.className = "msg__text";
+    const copyBtn = document.createElement("button");
+    bindCopyButton(copyBtn, () => textEl.textContent);
+    bubble.appendChild(textEl);
+    stack.appendChild(bubble);
+    stack.appendChild(copyBtn);
+    logInner.appendChild(stack);
     updateEmptyState();
     scrollLog();
-    return { div, textEl };
+    return { div: bubble, textEl };
   }
 
   function clearChat() {
