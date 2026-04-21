@@ -7,11 +7,28 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
-from threading import Thread
+from threading import Event, Thread
 
 import torch
 from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    StoppingCriteria,
+    StoppingCriteriaList,
+    TextIteratorStreamer,
+)
+
+
+class _CancelStoppingCriteria(StoppingCriteria):
+    """Interrompe ``model.generate`` quando ``cancel_event`` está definido."""
+
+    def __init__(self, cancel_event: Event) -> None:
+        super().__init__()
+        self.cancel_event = cancel_event
+
+    def __call__(self, input_ids, scores, **kwargs) -> bool:
+        return self.cancel_event.is_set()
 
 
 def load_lora_pipeline(
@@ -139,6 +156,7 @@ def generate_chat_reply_stream(
     temperature: float = 0.7,
     top_p: float = 0.9,
     do_sample: bool = True,
+    cancel_event: Event | None = None,
 ) -> Iterator[str]:
     """
     Igual a ``generate_chat_reply``, mas produz **pedaços de texto** à medida que o modelo gera
@@ -172,6 +190,10 @@ def generate_chat_reply_stream(
         "pad_token_id": tokenizer.pad_token_id,
         "eos_token_id": tokenizer.eos_token_id,
     }
+    if cancel_event is not None:
+        gen_kwargs["stopping_criteria"] = StoppingCriteriaList(
+            [_CancelStoppingCriteria(cancel_event)]
+        )
 
     thread = Thread(target=model.generate, kwargs=gen_kwargs)
     thread.start()
@@ -179,6 +201,8 @@ def generate_chat_reply_stream(
     accumulated = ""
     try:
         for text in streamer:
+            if cancel_event is not None and cancel_event.is_set():
+                break
             if not text:
                 continue
             if text.startswith(accumulated):

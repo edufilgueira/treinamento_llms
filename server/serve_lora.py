@@ -39,7 +39,7 @@ apply_loading_progress_env()
 if not os.environ.get("PYTORCH_ALLOC_CONF"):
     os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -189,6 +189,7 @@ def _sse_stream_locked(
     max_new_tokens: int,
     temperature: float,
     top_p: float,
+    cancel_event: threading.Event,
 ):
     assert _engine is not None
     tokenizer = _engine["tokenizer"]
@@ -201,10 +202,23 @@ def _sse_stream_locked(
             max_new_tokens=max_new_tokens,
             temperature=temperature,
             top_p=top_p,
+            cancel_event=cancel_event,
         ):
             line = json.dumps({"delta": delta}, ensure_ascii=False)
             yield f"data: {line}\n\n".encode("utf-8")
-        yield b"data: [DONE]\n\n"
+        if not cancel_event.is_set():
+            yield b"data: [DONE]\n\n"
+
+
+async def _watch_client_disconnect(request: Request, cancel_event: threading.Event) -> None:
+    try:
+        while True:
+            if await request.is_disconnected():
+                cancel_event.set()
+                return
+            await asyncio.sleep(0.2)
+    except asyncio.CancelledError:
+        return
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -281,7 +295,7 @@ async def chat(body: ChatIn):
 
 
 @app.post("/api/chat/stream")
-async def chat_stream(body: ChatIn):
+async def chat_stream(request: Request, body: ChatIn):
     if _engine is None:
         raise HTTPException(status_code=503, detail="Modelo ainda não carregado.")
     msgs = [{"role": m.role, "content": m.content} for m in body.messages]
@@ -289,13 +303,23 @@ async def chat_stream(body: ChatIn):
         if m["role"] not in ("user", "assistant", "system"):
             raise HTTPException(status_code=400, detail="role inválido.")
 
+    cancel_event = threading.Event()
+    disconnect_task = asyncio.create_task(_watch_client_disconnect(request, cancel_event))
+
+    def sse_iter():
+        try:
+            yield from _sse_stream_locked(
+                msgs,
+                body.max_new_tokens,
+                body.temperature,
+                body.top_p,
+                cancel_event,
+            )
+        finally:
+            disconnect_task.cancel()
+
     return StreamingResponse(
-        _sse_stream_locked(
-            msgs,
-            body.max_new_tokens,
-            body.temperature,
-            body.top_p,
-        ),
+        sse_iter(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

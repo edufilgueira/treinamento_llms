@@ -21,6 +21,16 @@
 
   const history = [];
 
+  /** AbortController do pedido de streaming atual (novo chat, nova mensagem ou saída da página). */
+  let streamAborter = null;
+
+  function abortStream() {
+    if (streamAborter) {
+      streamAborter.abort();
+      streamAborter = null;
+    }
+  }
+
   /**
    * Com a página em file://, fetch("/api/...") não aponta para o servidor.
    * Usa 127.0.0.1:8765 por defeito; opcional: localStorage "oraculo_api_origin" = "http://host:porta"
@@ -192,10 +202,12 @@
   }
 
   function clearChat() {
+    abortStream();
     history.length = 0;
     logInner.innerHTML = "";
     inputEl.value = "";
     autoResizeInput();
+    delete sendBtn.dataset.busy;
     updateSendState();
     updateEmptyState();
     if (mobileMenu.classList.contains("is-open")) closeMobileMenu();
@@ -209,6 +221,11 @@
   async function send() {
     const text = inputEl.value.trim();
     if (!text) return;
+    abortStream();
+    const ac = new AbortController();
+    streamAborter = ac;
+    const signal = ac.signal;
+
     inputEl.value = "";
     autoResizeInput();
     updateSendState();
@@ -226,6 +243,7 @@
         const r = await fetch(apiUrl("/api/chat/stream"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal,
         body: JSON.stringify({
           messages: history.slice(),
           max_new_tokens: 2048,
@@ -268,12 +286,14 @@
         }
         scrollLog();
       }
-      assistantDiv.classList.remove("streaming");
       history.push({ role: "assistant", content: fullReply });
     } catch (e) {
-      textEl.textContent = "Erro: " + e.message;
-      assistantDiv.classList.remove("streaming");
+      if (e.name !== "AbortError") {
+        textEl.textContent = "Erro: " + e.message;
+      }
     } finally {
+      assistantDiv.classList.remove("streaming");
+      if (streamAborter === ac) streamAborter = null;
       delete sendBtn.dataset.busy;
       updateSendState();
       inputEl.focus();
@@ -298,6 +318,10 @@
     if (!e.matches && mobileMenu.classList.contains("is-open")) {
       closeMobileMenu();
     }
+  });
+
+  window.addEventListener("beforeunload", () => {
+    abortStream();
   });
 
   autoResizeInput();
