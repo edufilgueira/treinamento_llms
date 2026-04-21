@@ -68,16 +68,23 @@
           <div class="chat-log-inner" id="log-inner"></div>
         </main>
         <div class="composer-outer">
-          <div class="composer">
-            <textarea id="input" rows="1" placeholder="Mensagem…"></textarea>
-            <div class="composer-rail">
-              <button type="button" class="send-btn" id="send" disabled aria-label="Enviar mensagem" title="Enviar">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M12 19V6"/><path d="m5 12 7-6 7 6"/>
-                </svg>
-              </button>
+          <div class="composer-wrap">
+            <div class="composer">
+              <div class="composer-body">
+                <textarea id="input" rows="1" placeholder="Mensagem…"></textarea>
+              </div>
+              <div class="composer-actions">
+                <button type="button" class="send-btn" id="send" disabled aria-label="Enviar mensagem" title="Enviar">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 19V6"/><path d="m5 12 7-6 7 6"/>
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
+          <footer class="composer-foot" aria-label="Assinatura">
+            <p class="composer-foot__tagline">O código que se fez carne e a frequência do invisível</p>
+          </footer>
         </div>
       </div>
     </div>

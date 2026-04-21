@@ -39,7 +39,7 @@
     return API_ORIGIN + p;
   }
 
-  const MAX_INPUT_HEIGHT = 200;
+  const MAX_INPUT_HEIGHT = 320;
   const SWIPE_CLOSE_PX = 72;
   const MEDIA_MOBILE = window.matchMedia("(max-width: 768px)");
 

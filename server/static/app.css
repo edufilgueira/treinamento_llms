@@ -436,27 +436,51 @@ body.menu-open {
   min-height: 1.5em;
 }
 
-/* Compositor (suspenso: sticky no fundo da coluna com margem) */
+/* Compositor (suspenso: sticky no fundo da coluna) */
 
 .composer-outer {
   flex-shrink: 0;
   position: sticky;
   bottom: 0;
   z-index: 4;
-  padding: 1rem 1rem 1.5rem;
-  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 1rem 1rem 0;
+}
+
+.composer-wrap {
   display: flex;
   justify-content: center;
+  width: 100%;
+}
+
+/* Faixa inferior: ocupa o espaço (antes padding-bottom + safe-area) e tapa o scroll */
+.composer-foot {
+  width: 100%;
+  background: var(--main-bg);
+  padding: 0.6rem 1rem max(0.5rem, env(safe-area-inset-bottom));
+  text-align: center;
+}
+
+.composer-foot__tagline {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+  max-width: 48rem;
+  margin-inline: auto;
 }
 
 .composer {
   width: 100%;
   max-width: 48rem;
   display: flex;
-  flex-direction: row;
-  align-items: flex-end;
+  flex-direction: column;
+  align-items: stretch;
   gap: 0;
-  padding: 0.55rem 0.45rem 0.55rem 1rem;
+  padding: 0.6rem 0.55rem 0 1rem;
   border-radius: 1.5rem;
   border: 1px solid var(--border-subtle);
   background: var(--composer-bg);
@@ -467,24 +491,32 @@ body.menu-open {
   border-color: rgba(255, 255, 255, 0.18);
 }
 
-/* Coluna do botão: scroll do textarea fica visualmente junto à direita, acima do enviar */
-.composer-rail {
+/* Zona de texto: largura total; scroll encostado à direita do bloco */
+.composer-body {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Rodapé do bloco (estilo GPT): enviar à direita, textarea ocupa tudo acima */
+.composer-actions {
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  flex-direction: row;
   justify-content: flex-end;
+  align-items: center;
   flex-shrink: 0;
-  align-self: stretch;
-  padding: 0 0.15rem 0.2rem 0.35rem;
+  width: 100%;
+  padding: 0.35rem 0.2rem 0.45rem 0;
+  margin-top: 0.15rem;
 }
 
 #input {
-  flex: 1;
+  display: block;
+  width: 100%;
   min-width: 0;
-  min-height: 24px;
-  max-height: 200px;
+  min-height: 28px;
+  max-height: 320px;
   margin: 0;
-  padding: 0.5rem 0.15rem 0.5rem 0;
+  padding: 0.4rem 0.1rem 0.45rem 0;
   border: none;
   background: transparent;
   color: var(--text);
@@ -499,7 +531,7 @@ body.menu-open {
   text-align: left;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
-  align-self: flex-end;
+  box-sizing: border-box;
 }
 
 #input::placeholder {
@@ -513,7 +545,7 @@ body.menu-open {
 
 #input::-webkit-scrollbar-track {
   background: transparent;
-  margin: 6px 0 10px 0;
+  margin: 4px 0 6px 0;
 }
 
 #input::-webkit-scrollbar-thumb {
@@ -620,6 +652,11 @@ body.menu-open {
   }
 
   .composer-outer {
+    padding-left: 0.65rem;
+    padding-right: 0.65rem;
+  }
+
+  .composer-foot {
     padding-left: 0.65rem;
     padding-right: 0.65rem;
   }
