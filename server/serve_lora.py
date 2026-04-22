@@ -17,10 +17,12 @@ import argparse
 import asyncio
 import json
 import os
+import secrets
 import sys
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 _SERVER_DIR = Path(__file__).resolve().parent
 _PROJECT_ROOT = _SERVER_DIR.parent
@@ -55,6 +57,11 @@ STATIC_DIR = _SERVER_DIR / "static"
 _gen_lock = threading.Lock()
 _engine: dict | None = None
 _startup_args: argparse.Namespace | None = None
+
+# Geração desacoplada: continua ainda que o cliente (telemóvel) corte a ligação; leitura por GET.
+_jobs_lock = threading.Lock()
+_jobs: dict[str, dict[str, Any]] = {}
+_MAX_JOBS_BUFFER = 64
 
 
 def _parse_args() -> argparse.Namespace:
@@ -155,6 +162,16 @@ class ChatOut(BaseModel):
     reply: str
 
 
+class JobCreateOut(BaseModel):
+    job_id: str
+
+
+class JobStateOut(BaseModel):
+    status: str
+    text: str
+    error: str | None = None
+
+
 def _run_generate(
     messages: list[dict],
     max_new_tokens: int,
@@ -208,6 +225,67 @@ def _sse_stream_locked(
             yield f"data: {line}\n\n".encode("utf-8")
         if not cancel_event.is_set():
             yield b"data: [DONE]\n\n"
+
+
+def _prune_completed_jobs_if_needed() -> None:
+    with _jobs_lock:
+        n = len(_jobs)
+        if n <= _MAX_JOBS_BUFFER:
+            return
+        to_remove = n - _MAX_JOBS_BUFFER + 8
+        finished: list[str] = []
+        for k, v in _jobs.items():
+            if v.get("status") in ("done", "error", "cancelled"):
+                finished.append(k)
+            if len(finished) >= to_remove:
+                break
+        for k in finished:
+            _jobs.pop(k, None)
+
+
+def _job_worker(
+    job_id: str,
+    messages: list[dict],
+    max_new_tokens: int,
+    temperature: float,
+    top_p: float,
+) -> None:
+    assert _engine is not None
+    with _jobs_lock:
+        st = _jobs.get(job_id)
+    if not st:
+        return
+    cancel_event: threading.Event = st["cancel_event"]
+    tokenizer = _engine["tokenizer"]
+    model = _engine["model"]
+    try:
+        with _gen_lock:
+            for delta in generate_chat_reply_stream(
+                tokenizer,
+                model,
+                messages,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                cancel_event=cancel_event,
+            ):
+                with _jobs_lock:
+                    if job_id not in _jobs:
+                        return
+                    _jobs[job_id]["text"] += delta
+        with _jobs_lock:
+            if job_id not in _jobs:
+                return
+            j = _jobs[job_id]
+            if j["cancel_event"].is_set():
+                j["status"] = "cancelled"
+            else:
+                j["status"] = "done"
+    except Exception as err:  # noqa: BLE001
+        with _jobs_lock:
+            if job_id in _jobs:
+                _jobs[job_id]["status"] = "error"
+                _jobs[job_id]["error"] = str(err)
 
 
 async def _watch_client_disconnect(request: Request, cancel_event: threading.Event) -> None:
@@ -327,6 +405,58 @@ async def chat_stream(request: Request, body: ChatIn):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.post("/api/chat/jobs", response_model=JobCreateOut)
+async def create_chat_job(body: ChatIn):
+    """Inicia geração em background; o cliente consulta com GET /api/chat/jobs/{id} (polling)."""
+    if _engine is None:
+        raise HTTPException(status_code=503, detail="Modelo ainda não carregado.")
+    msgs = [{"role": m.role, "content": m.content} for m in body.messages]
+    for m in msgs:
+        if m["role"] not in ("user", "assistant", "system"):
+            raise HTTPException(status_code=400, detail="role inválido.")
+    _prune_completed_jobs_if_needed()
+    job_id = secrets.token_urlsafe(16)
+    cancel_event = threading.Event()
+    with _jobs_lock:
+        _jobs[job_id] = {
+            "status": "running",
+            "text": "",
+            "error": None,
+            "cancel_event": cancel_event,
+        }
+    thread = threading.Thread(
+        target=_job_worker,
+        args=(job_id, msgs, body.max_new_tokens, body.temperature, body.top_p),
+        daemon=True,
+        name=f"job-{job_id[:8]}",
+    )
+    thread.start()
+    return JobCreateOut(job_id=job_id)
+
+
+@app.get("/api/chat/jobs/{job_id}", response_model=JobStateOut)
+async def get_chat_job(job_id: str):
+    with _jobs_lock:
+        j = _jobs.get(job_id)
+    if not j:
+        raise HTTPException(status_code=404, detail="job inexistente ou expirado.")
+    return JobStateOut(
+        status=j["status"],
+        text=j.get("text", ""),
+        error=j.get("error"),
+    )
+
+
+@app.post("/api/chat/jobs/{job_id}/cancel")
+async def cancel_chat_job(job_id: str):
+    with _jobs_lock:
+        j = _jobs.get(job_id)
+        if not j:
+            raise HTTPException(status_code=404, detail="job inexistente.")
+        j["cancel_event"].set()
+    return {"ok": True}
 
 
 def main() -> None:

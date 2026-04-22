@@ -535,6 +535,23 @@ body.menu-open {
   pointer-events: auto;
 }
 
+/* Telemóveis / toque: não há :hover; o botão tem de ser visível e clicável. */
+@media (hover: none) {
+  .msg-stack .msg__copy {
+    opacity: 0.9;
+    pointer-events: auto;
+    -webkit-tap-highlight-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .msg-stack.msg-stack--copy-pinned .msg__copy {
+    opacity: 1;
+  }
+
+  .msg__copy::before {
+    content: none;
+  }
+}
+
 /* Compositor (suspenso: sticky no fundo da coluna) */
 
 .composer-outer {
@@ -706,6 +723,32 @@ body.menu-open {
 
 .send-btn:disabled {
   opacity: 0.85;
+}
+
+.send-btn.send-btn--stop {
+  background: #b64a4a;
+  color: #fff;
+  cursor: pointer;
+  opacity: 1;
+  filter: none;
+}
+
+.send-btn.send-btn--stop:hover {
+  filter: brightness(1.08);
+}
+
+.send-btn.send-btn--stop:disabled,
+.send-btn.send-btn--stop:not(:disabled) {
+  opacity: 1;
+  cursor: pointer;
+}
+
+.sidebar-new-chat:disabled,
+.menu-new-chat:disabled,
+.icon-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .send-btn svg {

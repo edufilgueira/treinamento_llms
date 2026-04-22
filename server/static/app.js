@@ -1,5 +1,5 @@
 /**
- * Oráculo Kiaiá — chat local (streaming SSE)
+ * Oráculo Kiaiá — chat local (jobs no servidor + polling; Screen Wake Lock durante geração)
  */
 (function () {
   "use strict";
@@ -21,8 +21,13 @@
 
   const history = [];
 
-  /** AbortController do pedido de streaming atual (novo chat, nova mensagem ou saída da página). */
+  /** AbortController do pedido (polling) atual; Parar = abort. */
   let streamAborter = null;
+
+  /** Geração em background no servidor; cancelamento explícito via /cancel. */
+  let currentJobId = null;
+
+  let screenWakeLock = null;
 
   /** Bloco cuja ação “copiar” fica visível até outro botão copiar ser clicado. */
   let copyPinnedStack = null;
@@ -38,10 +43,58 @@
   }
 
   function abortStream() {
+    if (currentJobId) {
+      const jid = currentJobId;
+      currentJobId = null;
+      fetch(apiUrl("/api/chat/jobs/" + encodeURIComponent(jid) + "/cancel"), { method: "POST" }).catch(
+        function () {}
+      );
+    }
     if (streamAborter) {
       streamAborter.abort();
       streamAborter = null;
     }
+  }
+
+  async function acquireScreenWakeLock() {
+    try {
+      if (!navigator.wakeLock || document.visibilityState !== "visible") return;
+      if (screenWakeLock) return;
+      screenWakeLock = await navigator.wakeLock.request("screen");
+      screenWakeLock.addEventListener("release", function () {
+        screenWakeLock = null;
+      });
+    } catch (_) {
+      /* Permissão ou não suportado */
+    }
+  }
+
+  function releaseScreenWakeLock() {
+    if (screenWakeLock) {
+      screenWakeLock.release().catch(function () {});
+      screenWakeLock = null;
+    }
+  }
+
+  /** Intervalo entre pedidos GET ao estado do job (geração em background no servidor). */
+  const JOB_POLL_MS = 400;
+
+  function sleepPoll(ms, signal) {
+    return new Promise(function (resolve, reject) {
+      if (signal.aborted) {
+        reject(new DOMException("Aborted", "AbortError"));
+        return;
+      }
+      const t = setTimeout(resolve, ms);
+      signal.addEventListener(
+        "abort",
+        function () {
+          clearTimeout(t);
+          reject(new DOMException("Aborted", "AbortError"));
+        },
+        { once: true }
+      );
+    });
   }
 
   /**
@@ -72,9 +125,45 @@
     inputEl.style.height = h + "px";
   }
 
+  const SEND_BTN_ICON =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V6"/><path d="m5 12 7-6 7 6"/></svg>';
+
+  const STOP_BTN_ICON =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>';
+
+  function setNewChatButtonsDisabled(disabled) {
+    if (newChatBtn) {
+      newChatBtn.disabled = disabled;
+      newChatBtn.setAttribute("aria-disabled", disabled ? "true" : "false");
+    }
+    if (mobileNewChatBtn) {
+      mobileNewChatBtn.disabled = disabled;
+      mobileNewChatBtn.setAttribute("aria-disabled", disabled ? "true" : "false");
+    }
+    if (menuNewChatBtn) {
+      menuNewChatBtn.disabled = disabled;
+      menuNewChatBtn.setAttribute("aria-disabled", disabled ? "true" : "false");
+    }
+  }
+
   function updateSendState() {
-    const hasText = inputEl.value.trim().length > 0;
-    sendBtn.disabled = !hasText || sendBtn.dataset.busy === "1";
+    const busy = sendBtn.dataset.busy === "1";
+    if (busy) {
+      sendBtn.disabled = false;
+      sendBtn.classList.add("send-btn--stop");
+      sendBtn.setAttribute("aria-label", "Parar geração");
+      sendBtn.setAttribute("title", "Parar");
+      sendBtn.innerHTML = STOP_BTN_ICON;
+      setNewChatButtonsDisabled(true);
+    } else {
+      sendBtn.classList.remove("send-btn--stop");
+      sendBtn.setAttribute("aria-label", "Enviar mensagem");
+      sendBtn.setAttribute("title", "Enviar");
+      sendBtn.innerHTML = SEND_BTN_ICON;
+      const hasText = inputEl.value.trim().length > 0;
+      sendBtn.disabled = !hasText;
+      setNewChatButtonsDisabled(false);
+    }
   }
 
   function updateEmptyState() {
@@ -189,16 +278,82 @@
     }
   }
 
+  /** Só aplica se o utilizador estiver perto do fim; ao subir para ler, o streaming deixa de puxar a vista. */
+  const LOG_BOTTOM_THRESHOLD_PX = 96;
+  let logUserFollowingBottom = true;
+
+  function getScrollContainer() {
+    return mainScrollEl || logEl;
+  }
+
+  function isLogNearBottom() {
+    const el = getScrollContainer();
+    if (!el) return true;
+    const gap = el.scrollHeight - el.clientHeight - el.scrollTop;
+    return gap < LOG_BOTTOM_THRESHOLD_PX;
+  }
+
   function scrollLog() {
-    const el = mainScrollEl || logEl;
+    const el = getScrollContainer();
+    if (!el) return;
     el.scrollTop = el.scrollHeight;
   }
+
+  function scrollLogIfFollowing() {
+    if (logUserFollowingBottom) {
+      scrollLog();
+    }
+  }
+
+  (function attachLogScrollListener() {
+    const el = getScrollContainer();
+    if (!el) return;
+    el.addEventListener(
+      "scroll",
+      function () {
+        logUserFollowingBottom = isLogNearBottom();
+      },
+      { passive: true }
+    );
+  })();
 
   const COPY_ICON_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
 
   const CHECK_ICON_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+
+  function copyTextToClipboard(text) {
+    if (typeof navigator !== "undefined" && navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text).catch(() => copyTextViaExecCommand(text));
+    }
+    return copyTextViaExecCommand(text);
+  }
+
+  function copyTextViaExecCommand(text) {
+    return new Promise((resolve, reject) => {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "readonly");
+      ta.style.cssText =
+        "position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;border:0;padding:0;margin:0;pointer-events:none;";
+      document.body.appendChild(ta);
+      try {
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, text.length);
+        const ok = document.execCommand("copy");
+        if (ok) resolve();
+        else reject(new Error("execCommand"));
+      } catch (err) {
+        reject(err);
+      } finally {
+        if (ta.parentNode) {
+          document.body.removeChild(ta);
+        }
+      }
+    });
+  }
 
   function bindCopyButton(btn, getText, stack) {
     btn.type = "button";
@@ -211,7 +366,7 @@
       const t = getText();
       if (!t) return;
       setCopyPinnedStack(stack);
-      navigator.clipboard.writeText(t).then(
+      copyTextToClipboard(t).then(
         () => {
           if (btn._restoreIconTimer) {
             window.clearTimeout(btn._restoreIconTimer);
@@ -269,7 +424,6 @@
   }
 
   function clearChat() {
-    abortStream();
     setCopyPinnedStack(null);
     history.length = 0;
     logInner.innerHTML = "";
@@ -289,10 +443,11 @@
   async function send() {
     const text = inputEl.value.trim();
     if (!text) return;
-    abortStream();
     const ac = new AbortController();
     streamAborter = ac;
     const signal = ac.signal;
+
+    logUserFollowingBottom = true;
 
     inputEl.value = "";
     autoResizeInput();
@@ -305,13 +460,13 @@
     updateSendState();
 
     const { div: assistantDiv, textEl } = appendAssistantStreaming();
-    let fullReply = "";
+    let lastText = "";
+    let endReason = "none";
 
     try {
-        const r = await fetch(apiUrl("/api/chat/stream"), {
+      const createRes = await fetch(apiUrl("/api/chat/jobs"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        signal,
         body: JSON.stringify({
           messages: history.slice(),
           max_new_tokens: 2048,
@@ -319,59 +474,100 @@
           top_p: 0.9,
         }),
       });
-      if (!r.ok) {
-        let detail = r.statusText;
+      if (!createRes.ok) {
+        let detail = createRes.statusText;
         try {
-          const errBody = await r.json();
+          const errBody = await createRes.json();
           detail =
             typeof errBody.detail === "string" ? errBody.detail : JSON.stringify(errBody.detail);
         } catch (_) {}
         throw new Error(detail);
       }
-      const reader = r.body.getReader();
-      const dec = new TextDecoder();
-      let buf = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        let sep;
-        while ((sep = buf.indexOf("\n\n")) !== -1) {
-          const block = buf.slice(0, sep);
-          buf = buf.slice(sep + 2);
-          for (const line of block.split("\n")) {
-            if (!line.startsWith("data: ")) continue;
-            const payload = line.slice(6).trim();
-            if (payload === "[DONE]") continue;
-            try {
-              const j = JSON.parse(payload);
-              if (j.delta) {
-                fullReply += j.delta;
-                textEl.textContent += j.delta;
-              }
-            } catch (_) {}
-          }
-        }
-        scrollLog();
+      const createJson = await createRes.json();
+      const jobId = createJson.job_id;
+      if (!jobId) {
+        throw new Error("Resposta sem job_id");
       }
-      history.push({ role: "assistant", content: fullReply });
+      currentJobId = jobId;
+      await acquireScreenWakeLock();
+
+      for (;;) {
+        const stRes = await fetch(apiUrl("/api/chat/jobs/" + encodeURIComponent(jobId)), { signal });
+        if (!stRes.ok) {
+          let det = stRes.statusText;
+          try {
+            const jerr = await stRes.json();
+            det = typeof jerr.detail === "string" ? jerr.detail : String(stRes.status);
+          } catch (_) {}
+          throw new Error(det);
+        }
+        const st = await stRes.json();
+        lastText = st.text != null ? String(st.text) : "";
+        textEl.textContent = lastText;
+        scrollLogIfFollowing();
+        if (st.status === "done") {
+          endReason = "done";
+          break;
+        }
+        if (st.status === "error") {
+          throw new Error(st.error || "Erro no modelo");
+        }
+        if (st.status === "cancelled") {
+          endReason = "cancelled";
+          break;
+        }
+        await sleepPoll(JOB_POLL_MS, signal);
+      }
     } catch (e) {
-      if (e.name !== "AbortError") {
+      const isAbort =
+        e &&
+        (e.name === "AbortError" ||
+          (typeof e.message === "string" && /aborted|abort/i.test(e.message)));
+      if (isAbort) {
+        if (endReason === "none") {
+          endReason = "abort";
+        }
+      } else {
+        endReason = "error";
         textEl.textContent = "Erro: " + e.message;
       }
     } finally {
+      if (endReason === "done") {
+        history.push({ role: "assistant", content: lastText });
+      } else if (endReason === "cancelled" || endReason === "abort") {
+        if (lastText.trim().length) {
+          history.push({ role: "assistant", content: lastText });
+        } else {
+          const stack = assistantDiv.closest && assistantDiv.closest(".msg-stack");
+          if (stack) {
+            stack.remove();
+            updateEmptyState();
+          }
+        }
+      }
       assistantDiv.classList.remove("streaming");
-      if (streamAborter === ac) streamAborter = null;
+      currentJobId = null;
+      releaseScreenWakeLock();
+      if (streamAborter === ac) {
+        streamAborter = null;
+      }
       delete sendBtn.dataset.busy;
       updateSendState();
       inputEl.focus();
     }
   }
 
-  sendBtn.addEventListener("click", send);
+  sendBtn.addEventListener("click", function onSendOrStop() {
+    if (sendBtn.dataset.busy === "1") {
+      abortStream();
+      return;
+    }
+    send();
+  });
   inputEl.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      if (sendBtn.dataset.busy === "1") return;
       if (!sendBtn.disabled) send();
     }
   });
@@ -388,8 +584,10 @@
     }
   });
 
-  window.addEventListener("beforeunload", () => {
-    abortStream();
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible" && sendBtn.dataset.busy === "1") {
+      void acquireScreenWakeLock();
+    }
   });
 
   autoResizeInput();
