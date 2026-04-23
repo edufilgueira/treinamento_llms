@@ -25,7 +25,7 @@
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
               <circle cx="12" cy="7" r="4"/>
             </svg>
-            Nome de perfil
+            Perfil
           </button>
           <button type="button" class="btn-ghost btn-ghost--icon" id="open-settings-m">
             <svg class="account-menu__ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -171,12 +171,21 @@
   >
     <div class="modal__panel">
       <div class="modal__head">
-        <h2 class="modal__title" id="modal-profile-title">Nome de perfil</h2>
+        <h2 class="modal__title" id="modal-profile-title">Perfil</h2>
         <button type="button" class="modal__close" id="modal-profile-close" aria-label="Fechar">×</button>
       </div>
       <p class="modal__hint">Nome mostrado no canto. O utilizador de registo (login) não muda.</p>
       <label class="modal__label" for="profile-display-input">Nome a mostrar</label>
       <input type="text" id="profile-display-input" class="modal__input" maxlength="64" autocomplete="off" />
+      <label class="modal__label" for="profile-email-input">Email</label>
+      <input
+        type="email"
+        id="profile-email-input"
+        class="modal__input"
+        maxlength="254"
+        autocomplete="email"
+        placeholder="opcional"
+      />
       <p class="modal__small" id="profile-login-line"></p>
       <div class="modal__actions">
         <button type="button" class="btn-secondary" id="profile-cancel">Cancelar</button>
@@ -212,7 +221,7 @@
           placeholder="Instrução de sistema aplicada a todas as contas. Junta-se antes do teu system prompt pessoal."
         ></textarea>
       </div>
-      <label class="modal__label" for="settings-system-prompt">System prompt (só a tua conta)</label>
+      <label class="modal__label" for="settings-system-prompt">System prompt</label>
       <textarea
         id="settings-system-prompt"
         class="modal__textarea"

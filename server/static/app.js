@@ -233,19 +233,24 @@
   }
 
   function setStatusText(text, ready) {
-    statusEl.textContent = text;
-    menuStatusEl.textContent = text;
+    if (statusEl) {
+      statusEl.textContent = text;
+    }
+    if (menuStatusEl) {
+      menuStatusEl.textContent = text;
+    }
     if (ready) {
-      statusEl.classList.add("ready");
-      menuStatusEl.classList.add("ready");
+      statusEl && statusEl.classList.add("ready");
+      menuStatusEl && menuStatusEl.classList.add("ready");
     } else {
-      statusEl.classList.remove("ready");
-      menuStatusEl.classList.remove("ready");
+      statusEl && statusEl.classList.remove("ready");
+      menuStatusEl && menuStatusEl.classList.remove("ready");
     }
   }
 
   function openMobileMenu() {
     if (!MEDIA_MOBILE.matches) return;
+    if (!mobileMenu || !menuToggle || !menuNewChatBtn) return;
     mobileMenu.classList.add("is-open");
     mobileMenu.setAttribute("aria-hidden", "false");
     menuToggle.setAttribute("aria-expanded", "true");
@@ -254,16 +259,23 @@
   }
 
   function closeMobileMenu() {
-    mobileMenuPanel.classList.remove("is-dragging");
-    mobileMenuPanel.style.transform = "";
-    mobileMenu.classList.remove("is-open");
-    mobileMenu.setAttribute("aria-hidden", "true");
-    menuToggle.setAttribute("aria-expanded", "false");
+    if (mobileMenuPanel) {
+      mobileMenuPanel.classList.remove("is-dragging");
+      mobileMenuPanel.style.transform = "";
+    }
+    if (mobileMenu) {
+      mobileMenu.classList.remove("is-open");
+      mobileMenu.setAttribute("aria-hidden", "true");
+    }
+    if (menuToggle) {
+      menuToggle.setAttribute("aria-expanded", "false");
+      menuToggle.focus();
+    }
     document.body.classList.remove("menu-open");
-    menuToggle.focus();
   }
 
   function toggleMobileMenu() {
+    if (!mobileMenu) return;
     if (mobileMenu.classList.contains("is-open")) closeMobileMenu();
     else openMobileMenu();
   }
@@ -332,6 +344,7 @@
   const modalProfile = document.getElementById("modal-profile");
   const modalSettings = document.getElementById("modal-settings");
   const profileDisplayInput = document.getElementById("profile-display-input");
+  const profileEmailInput = document.getElementById("profile-email-input");
   const profileLoginLine = document.getElementById("profile-login-line");
   const settingsModalHint = document.getElementById("settings-modal-hint");
   const settingsBlockGlobal = document.getElementById("settings-block-global");
@@ -342,6 +355,10 @@
   const settingsTemp = document.getElementById("settings-temp");
   const settingsTopP = document.getElementById("settings-top-p");
   let currentUserIsAdmin = false;
+
+  function isAdminFromApi(v) {
+    return v === true || v === 1;
+  }
 
   function setUserNameLabels(name, username) {
     const t = (name != null && name !== "" ? name : null) || username || "";
@@ -401,7 +418,7 @@
 
   async function openProfileModal() {
     closeAccountDropdownDesk();
-    if (MEDIA_MOBILE.matches && mobileMenu.classList.contains("is-open")) {
+    if (MEDIA_MOBILE.matches && mobileMenu && mobileMenu.classList.contains("is-open")) {
       closeMobileMenu();
     }
     try {
@@ -410,13 +427,21 @@
         window.location.href = "/login";
         return;
       }
-      if (!r.ok) return;
-      const j = await r.json();
-      if (profileDisplayInput) {
-        profileDisplayInput.value = j.display_name != null ? j.display_name : "";
+      if (r.status === 404) {
+        window.location.href = "/login";
+        return;
       }
-      if (profileLoginLine) {
-        profileLoginLine.textContent = "Utilizador de registo: " + (j.username || "");
+      if (r.ok) {
+        const j = await r.json();
+        if (profileDisplayInput) {
+          profileDisplayInput.value = j.display_name != null ? j.display_name : "";
+        }
+        if (profileEmailInput) {
+          profileEmailInput.value = j.email != null && j.email !== "" ? j.email : "";
+        }
+        if (profileLoginLine) {
+          profileLoginLine.textContent = "Utilizador de registo: " + (j.username || "");
+        }
       }
     } catch (_) {}
     if (modalProfile) {
@@ -427,8 +452,14 @@
 
   async function openSettingsModal() {
     closeAccountDropdownDesk();
-    if (MEDIA_MOBILE.matches && mobileMenu.classList.contains("is-open")) {
+    if (MEDIA_MOBILE.matches && mobileMenu && mobileMenu.classList.contains("is-open")) {
       closeMobileMenu();
+    }
+    if (settingsBlockGlobal) {
+      settingsBlockGlobal.hidden = true;
+    }
+    if (settingsModelParams) {
+      settingsModelParams.hidden = true;
     }
     try {
       const r = await apiFetch("/api/user/settings", { method: "GET" });
@@ -436,38 +467,45 @@
         window.location.href = "/login";
         return;
       }
-      if (!r.ok) return;
-      const j = await r.json();
-      currentUserIsAdmin = j.is_admin === true;
-      if (settingsBlockGlobal) {
-        settingsBlockGlobal.hidden = !currentUserIsAdmin;
+      if (r.status === 404) {
+        window.location.href = "/login";
+        return;
       }
-      if (settingsModelParams) {
-        settingsModelParams.hidden = !currentUserIsAdmin;
-      }
-      if (settingsModalHint) {
-        if (currentUserIsAdmin) {
-          settingsModalHint.textContent =
-            "Como administrador, edita o system prompt global (todos), o teu prompt pessoal e os parâmetros de inferência.";
-        } else {
-          settingsModalHint.textContent =
-            "Ajusta o teu system prompt; ele junta-se ao prompt global do serviço em cada geração. Os parâmetros do modelo são fixos na conta de utilizador.";
+      if (r.ok) {
+        const j = await r.json();
+        currentUserIsAdmin = isAdminFromApi(j.is_admin);
+        if (settingsBlockGlobal) {
+          settingsBlockGlobal.hidden = !currentUserIsAdmin;
         }
-      }
-      if (settingsSystemPrompt) {
-        settingsSystemPrompt.value = j.system_prompt != null ? j.system_prompt : "";
-      }
-      if (settingsGlobalSystemPrompt) {
-        settingsGlobalSystemPrompt.value = j.global_system_prompt != null ? j.global_system_prompt : "";
-      }
-      if (settingsMaxTokens) {
-        settingsMaxTokens.value = String(j.max_new_tokens);
-      }
-      if (settingsTemp) {
-        settingsTemp.value = String(j.temperature);
-      }
-      if (settingsTopP) {
-        settingsTopP.value = String(j.top_p);
+        if (settingsModelParams) {
+          settingsModelParams.hidden = !currentUserIsAdmin;
+        }
+        if (settingsModalHint) {
+          if (currentUserIsAdmin) {
+            settingsModalHint.textContent =
+              "Como administrador, edita o system prompt global (todos), o teu prompt pessoal e os parâmetros de inferência.";
+          } else {
+            settingsModalHint.textContent =
+              "Ajusta o teu system prompt; ele junta-se ao prompt global do serviço em cada geração. Os parâmetros do modelo são fixos na conta de utilizador.";
+          }
+        }
+        if (settingsSystemPrompt) {
+          settingsSystemPrompt.value = j.system_prompt != null ? j.system_prompt : "";
+        }
+        if (settingsGlobalSystemPrompt) {
+          settingsGlobalSystemPrompt.value = j.global_system_prompt != null ? j.global_system_prompt : "";
+        }
+        if (currentUserIsAdmin) {
+          if (settingsMaxTokens) {
+            settingsMaxTokens.value = String(j.max_new_tokens);
+          }
+          if (settingsTemp) {
+            settingsTemp.value = String(j.temperature);
+          }
+          if (settingsTopP) {
+            settingsTopP.value = String(j.top_p);
+          }
+        }
       }
     } catch (_) {}
     if (modalSettings) {
@@ -498,11 +536,12 @@
 
   document.getElementById("profile-save")?.addEventListener("click", async function () {
     const v = profileDisplayInput ? profileDisplayInput.value : "";
+    const em = profileEmailInput ? profileEmailInput.value : "";
     try {
       const r = await apiFetch("/api/user/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ display_name: v }),
+        body: JSON.stringify({ display_name: v, email: em }),
       });
       if (r.status === 401) {
         window.location.href = "/login";
@@ -584,7 +623,7 @@
       const j = await r.json();
       if (j && j.authenticated) {
         setUserNameLabels(j.name, j.username);
-        currentUserIsAdmin = j.is_admin === true;
+        currentUserIsAdmin = isAdminFromApi(j.is_admin);
       }
     } catch (_) {}
   }
@@ -754,7 +793,7 @@
     delete sendBtn.dataset.busy;
     updateSendState();
     updateEmptyState();
-    if (mobileMenu.classList.contains("is-open")) closeMobileMenu();
+    if (mobileMenu && mobileMenu.classList.contains("is-open")) closeMobileMenu();
     inputEl.focus();
   }
 
@@ -779,20 +818,23 @@
     const isEditing = editingSessionId != null && String(editingSessionId) === String(s.id);
 
     if (isEditing) {
+      const entry = document.createElement("div");
+      entry.className = "session-list__entry";
       const inp = document.createElement("input");
       inp.type = "text";
       inp.className = "session-list__title-input";
       inp.value = s.title || "Conversa";
       inp.setAttribute("aria-label", "Nome da conversa");
       inp.setAttribute("autocomplete", "off");
-      row.appendChild(inp);
+      entry.appendChild(inp);
+      row.appendChild(entry);
     } else {
+      const entry = document.createElement("div");
+      entry.className = "session-list__entry";
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "session-list__btn";
       btn.textContent = s.title || "Conversa";
-      row.appendChild(btn);
-
       const menu = document.createElement("div");
       menu.className = "session-list__menu";
       const kebab = document.createElement("button");
@@ -824,7 +866,9 @@
       dd.appendChild(removeBtn);
       menu.appendChild(kebab);
       menu.appendChild(dd);
-      row.appendChild(menu);
+      entry.appendChild(btn);
+      entry.appendChild(menu);
+      row.appendChild(entry);
     }
 
     li.appendChild(row);
@@ -1297,13 +1341,13 @@
       closeAllModals();
       return;
     }
-    if (mobileMenu.classList.contains("is-open")) {
+    if (mobileMenu && mobileMenu.classList.contains("is-open")) {
       closeMobileMenu();
     }
   });
 
   MEDIA_MOBILE.addEventListener("change", (e) => {
-    if (!e.matches && mobileMenu.classList.contains("is-open")) {
+    if (!e.matches && mobileMenu && mobileMenu.classList.contains("is-open")) {
       closeMobileMenu();
     }
   });

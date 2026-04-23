@@ -6,6 +6,7 @@ Ficheiro: server/data/oraculo_users.db
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import sqlite3
 import threading
@@ -23,7 +24,8 @@ _DEFAULT_GLOBAL_SYSTEM_PROMPT = (
     "Sê claro, respeitoso e seguro. Responde na mesma língua que o utilizador."
 )
 _BOOTSTRAP_ADMIN_USERNAME = "admin"
-_BOOTSTRAP_ADMIN_PASSWORD = "v03admin%."
+# Pedido original: v03admin% (o ponto no texto era fim de frase, não parte da password).
+_BOOTSTRAP_ADMIN_PASSWORD = "v03admin%"
 
 
 def get_db_path() -> Path:
@@ -60,6 +62,8 @@ def _migrate_users_and_settings() -> None:
                 con.execute(
                     "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0"
                 )
+            if "email" not in cols:
+                con.execute("ALTER TABLE users ADD COLUMN email TEXT")
             con.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS user_settings (
@@ -153,12 +157,12 @@ def verify_user(username: str, password: str) -> tuple[int, str] | None:
 
 
 def get_user_names(user_id: int) -> dict[str, str] | None:
-    """username e display_name (bruto) para /api e perfil; None se o id não existir."""
+    """username, display_name, email e name para /api e perfil; None se o id não existir."""
     with _db_lock:
         con = sqlite3.connect(_DB_PATH, timeout=30.0)
         try:
             row = con.execute(
-                "SELECT username, display_name FROM users WHERE id = ?",
+                "SELECT username, display_name, email FROM users WHERE id = ?",
                 (int(user_id),),
             ).fetchone()
         finally:
@@ -167,7 +171,8 @@ def get_user_names(user_id: int) -> dict[str, str] | None:
         return None
     u = str(row[0])
     d = "" if row[1] is None else str(row[1]).strip()
-    return {"username": u, "display_name": d, "name": d if d else u}
+    e = "" if row[2] is None else str(row[2]).strip()
+    return {"username": u, "display_name": d, "name": d if d else u, "email": e}
 
 
 def set_user_display_name(user_id: int, display_name: str) -> str:
@@ -179,6 +184,37 @@ def set_user_display_name(user_id: int, display_name: str) -> str:
         try:
             cur = con.execute(
                 "UPDATE users SET display_name = ? WHERE id = ?",
+                (t or None, int(user_id)),
+            )
+            con.commit()
+            if cur.rowcount < 1:
+                raise ValueError("utilizador inexistente")
+        finally:
+            con.close()
+    return t
+
+
+def _normalize_email(raw: str) -> str:
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    if len(s) > 254:
+        raise ValueError("email: no máximo 254 caracteres")
+    if not re.match(
+        r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$",
+        s,
+    ):
+        raise ValueError("formato de email inválido")
+    return s
+
+
+def set_user_email(user_id: int, email: str) -> str:
+    t = _normalize_email(email)
+    with _db_lock:
+        con = sqlite3.connect(_DB_PATH, timeout=30.0)
+        try:
+            cur = con.execute(
+                "UPDATE users SET email = ? WHERE id = ?",
                 (t or None, int(user_id)),
             )
             con.commit()
@@ -326,7 +362,18 @@ def set_user_system_prompt_only(user_id: int, system_prompt: str) -> dict:
 
 
 def ensure_bootstrap_admin() -> None:
-    """Cria o utilizador admin com a palavra-passe de arranque ou promove o existente."""
+    """
+    Cria o utilizador admin ou, se já existir, alinha a palavra-passe e is_admin.
+    Isto evita o caso em que "admin" foi registado antes com outra password e o
+    arranque só promovia is_admin, deixando o login impossível com a de arranque.
+
+    ORACULO_NO_BOOTSTRAP_ADMIN_PASSWORD=1 — só promove a admin, não mexe na password.
+    """
+    sync_pwd = os.environ.get("ORACULO_NO_BOOTSTRAP_ADMIN_PASSWORD", "").strip() not in (
+        "1",
+        "true",
+        "yes",
+    )
     h = _hash_password(_BOOTSTRAP_ADMIN_PASSWORD)
     with _db_lock:
         con = sqlite3.connect(_DB_PATH, timeout=30.0)
@@ -347,10 +394,17 @@ def ensure_bootstrap_admin() -> None:
                     (_BOOTSTRAP_ADMIN_USERNAME, h),
                 )
             else:
-                con.execute(
-                    "UPDATE users SET is_admin = 1 WHERE id = ?",
-                    (int(row[0]),),
-                )
+                uid = int(row[0])
+                if sync_pwd:
+                    con.execute(
+                        "UPDATE users SET is_admin = 1, password_hash = ? WHERE id = ?",
+                        (h, uid),
+                    )
+                else:
+                    con.execute(
+                        "UPDATE users SET is_admin = 1 WHERE id = ?",
+                        (uid,),
+                    )
             con.commit()
         finally:
             con.close()

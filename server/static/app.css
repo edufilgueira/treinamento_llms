@@ -125,42 +125,59 @@ body.menu-open {
 
 .session-list__row {
   display: flex;
-  align-items: center;
-  gap: 0.1rem;
+  align-items: stretch;
   min-width: 0;
   width: 100%;
 }
 
+/* Bloco único: título + ⋯; o realce da sessão activa aplica-se aqui, não no botão do título. */
+.session-list__entry {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+  width: 100%;
+  gap: 0.15rem;
+  padding: 0.1rem 0.25rem 0.1rem 0.4rem;
+  border-radius: 0.5rem;
+  background: transparent;
+  transition: background 0.12s ease;
+  box-sizing: border-box;
+}
+
+.session-list__item:hover .session-list__entry {
+  background: var(--surface-hover, rgba(255, 255, 255, 0.05));
+}
+
+.session-list__item--active .session-list__entry {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.session-list__item--active .session-list__btn {
+  font-weight: 500;
+}
+
 .session-list__btn {
-  display: block;
+  display: -webkit-box;
   flex: 1;
   min-width: 0;
   text-align: left;
   border: none;
-  border-radius: 0.45rem;
+  border-radius: 0;
   background: transparent;
   color: var(--text, #ececec);
   font-size: 0.8rem;
   line-height: 1.3;
-  padding: 0.5rem 0.55rem;
+  padding: 0.4rem 0.15rem 0.4rem 0.15rem;
+  margin: 0;
   cursor: pointer;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   white-space: normal;
-  transition: background 0.12s ease;
-}
-
-.session-list__btn:hover {
-  background: var(--surface-hover, rgba(255, 255, 255, 0.06));
-}
-
-.session-list__item--active .session-list__btn {
-  background: rgba(255, 255, 255, 0.1);
-  font-weight: 500;
+  font-family: inherit;
 }
 
 .session-list__title-input {
@@ -170,53 +187,57 @@ body.menu-open {
   display: block;
   width: 100%;
   text-align: left;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 0.45rem;
-  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 0.4rem;
+  background: rgba(0, 0, 0, 0.3);
   color: var(--text, #ececec);
   font-size: 0.8rem;
   line-height: 1.3;
-  padding: 0.45rem 0.5rem;
+  padding: 0.4rem 0.5rem;
   font-family: inherit;
   outline: none;
 }
 
 .session-list__title-input:focus {
-  border-color: rgba(255, 255, 255, 0.4);
-  background: rgba(0, 0, 0, 0.45);
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(0, 0, 0, 0.4);
 }
 
-.session-list__item--active .session-list__title-input {
-  background: rgba(255, 255, 255, 0.1);
-  font-weight: 500;
+.session-list__item--active .session-list__entry .session-list__title-input {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.25);
 }
 
 .session-list__menu {
   position: relative;
-  flex-shrink: 0;
-  align-self: stretch;
+  flex: 0 0 auto;
+  align-self: center;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  margin-left: 0.05rem;
 }
 
+/* ⋯ alinhado à direita do bloco, sem “caixa” no hover: só o símbolo ganha leve realce. */
 .session-list__kebab {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.5rem;
-  min-height: 2rem;
-  padding: 0;
+  min-width: 1.4rem;
+  min-height: 1.4rem;
+  padding: 0.1rem;
   border: none;
-  border-radius: 0.4rem;
+  box-shadow: none;
   background: transparent;
-  color: var(--text, #ececec);
-  font-size: 0.9rem;
+  color: var(--text-secondary, #b0b0b0);
+  font-size: 1.05rem;
   line-height: 1;
   letter-spacing: 0.02em;
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.12s ease, background 0.12s ease;
+  border-radius: 0.25rem;
+  transition: opacity 0.12s ease, color 0.12s ease;
 }
 
 .session-list__item:hover .session-list__kebab,
@@ -228,8 +249,10 @@ body.menu-open {
 
 .session-list__kebab:hover,
 .session-list__kebab:focus-visible {
-  background: var(--surface-hover, rgba(255, 255, 255, 0.06));
+  background: transparent;
+  color: var(--text, #ececec);
   outline: none;
+  box-shadow: none;
 }
 
 /* Telemóvel / sem :hover: indicar ligeiramente o controlo (toque) */
@@ -1487,10 +1510,11 @@ body.auth-page {
 }
 
 /* Modais perfil / configurações */
+/* Acima do menu móvel (.mobile-menu = 3000) para diálogos de perfil/configurações serem visíveis */
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: 5000;
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(2px);
 }
@@ -1502,7 +1526,7 @@ body.auth-page {
 .modal {
   position: fixed;
   inset: 0;
-  z-index: 210;
+  z-index: 5010;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1605,6 +1629,12 @@ body.auth-page {
   grid-template-columns: 1fr;
   gap: 0.65rem;
   margin-top: 0.75rem;
+}
+
+/* display:grid acima anula o [hidden] nativo; forçar esconder blocos só-admin */
+#settings-model-params[hidden],
+#settings-block-global[hidden] {
+  display: none !important;
 }
 
 @media (min-width: 520px) {

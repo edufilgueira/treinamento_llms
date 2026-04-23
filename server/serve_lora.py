@@ -61,6 +61,7 @@ from auth_db import (
     is_user_admin,
     set_global_system_prompt,
     set_user_display_name,
+    set_user_email,
     set_user_model_settings,
     set_user_system_prompt_only,
     verify_user,
@@ -279,6 +280,7 @@ class SessionTitleUpdate(BaseModel):
 
 class UserProfileUpdate(BaseModel):
     display_name: str = Field("", max_length=64)
+    email: str = Field("", max_length=254)
 
 
 class UserModelSettingsIn(BaseModel):
@@ -432,6 +434,7 @@ async def auth_me(request: Request):
             "username": uname,
             "display_name": None,
             "name": uname,
+            "email": "",
             "is_admin": is_user_admin(int(uid)),
         }
     return {
@@ -440,6 +443,7 @@ async def auth_me(request: Request):
         "username": names["username"],
         "display_name": names.get("display_name") or None,
         "name": names["name"],
+        "email": names.get("email") or "",
         "is_admin": is_user_admin(int(uid)),
     }
 
@@ -453,6 +457,7 @@ async def user_get_profile(_uid: UserIdDep):
         "username": n["username"],
         "display_name": n.get("display_name") or "",
         "name": n["name"],
+        "email": n.get("email") or "",
     }
 
 
@@ -460,13 +465,15 @@ async def user_get_profile(_uid: UserIdDep):
 async def user_patch_profile(_uid: UserIdDep, body: UserProfileUpdate):
     try:
         t = set_user_display_name(int(_uid), body.display_name)
+        em = set_user_email(int(_uid), body.email)
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err)) from err
-    n = get_user_names(int(_uid)) or {"username": "", "name": t}
+    n = get_user_names(int(_uid)) or {"username": "", "name": t, "email": em}
     return {
         "username": n["username"],
         "display_name": t,
         "name": n["name"],
+        "email": em,
     }
 
 
