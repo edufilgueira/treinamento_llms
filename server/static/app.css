@@ -309,6 +309,21 @@ body.menu-open {
   transition: none;
 }
 
+.mobile-menu__user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mobile-menu__user .user-name {
+  flex: 1;
+  min-width: 0;
+}
+
 .mobile-menu__brand {
   font-size: 1.25rem;
   font-weight: 600;
@@ -830,4 +845,148 @@ body.menu-open {
   .sidebar {
     display: flex;
   }
+}
+
+/* Páginas de login / registo */
+
+body.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: var(--main-bg, #000);
+  color: var(--text, #ececec);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 24rem;
+  padding: 2rem 1.75rem;
+  border-radius: 1.25rem;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.auth-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.4rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+
+.auth-sub {
+  margin: 0 0 1.5rem;
+  font-size: 0.88rem;
+  color: var(--text-secondary, #9a9a9a);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.auth-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary, #9a9a9a);
+  margin-top: 0.5rem;
+}
+
+.auth-label:first-of-type {
+  margin-top: 0;
+}
+
+.auth-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.65rem 0.9rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text, #ececec);
+  font-size: 1rem;
+}
+
+.auth-input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.auth-err {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: #e88;
+}
+
+.auth-btn {
+  margin-top: 1rem;
+  padding: 0.7rem 1rem;
+  border: none;
+  border-radius: 0.75rem;
+  background: var(--text, #e8e8e8);
+  color: var(--main-bg, #000);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+
+.auth-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.auth-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-footer {
+  margin: 1.5rem 0 0;
+  text-align: center;
+  font-size: 0.88rem;
+}
+
+.auth-link {
+  color: #9cd4ff;
+  text-decoration: none;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+}
+
+/* Sair (chat após login) */
+.topbar__user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.user-name {
+  font-size: 0.8rem;
+  color: var(--text-secondary, #9a9a9a);
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-logout {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.78rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.15));
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text, #ececec);
+  cursor: pointer;
+}
+
+.btn-logout:hover {
+  background: rgba(255, 255, 255, 0.1);
 }

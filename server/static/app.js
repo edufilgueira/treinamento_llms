@@ -46,7 +46,7 @@
     if (currentJobId) {
       const jid = currentJobId;
       currentJobId = null;
-      fetch(apiUrl("/api/chat/jobs/" + encodeURIComponent(jid) + "/cancel"), { method: "POST" }).catch(
+      apiFetch("/api/chat/jobs/" + encodeURIComponent(jid) + "/cancel", { method: "POST" }).catch(
         function () {}
       );
     }
@@ -113,6 +113,13 @@
   function apiUrl(path) {
     const p = path.startsWith("/") ? path : "/" + path;
     return API_ORIGIN + p;
+  }
+
+  /** Sessão por cookie: incluir credenciais em pedidos à API. */
+  function apiFetch(path, init) {
+    const o = init ? Object.assign({}, init) : {};
+    o.credentials = o.credentials || "same-origin";
+    return fetch(apiUrl(path), o);
   }
 
   const MAX_INPUT_HEIGHT = 320;
@@ -266,9 +273,15 @@
 
   async function refreshStatus() {
     try {
-        const r = await fetch(apiUrl("/api/status"));
+      const r = await apiFetch("/api/status");
+      if (r.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
       const j = await r.json();
-      if (j.loaded) {
+      if (j.ui_only) {
+        setStatusText("UI (sem modelo)", false);
+      } else if (j.loaded) {
         setStatusText(j.mode + " · " + j.model_name, true);
       } else {
         setStatusText("A carregar modelo…", false);
@@ -277,6 +290,39 @@
       setStatusText("Sem ligação", false);
     }
   }
+
+  async function loadSessionUser() {
+    try {
+      const r = await apiFetch("/api/auth/me", { method: "GET" });
+      if (r.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+      const j = await r.json();
+      if (j && j.authenticated && j.username) {
+        const desk = document.getElementById("user-name-desk");
+        const menu = document.getElementById("user-name-menu");
+        if (desk) {
+          desk.textContent = j.username;
+          desk.setAttribute("title", j.username);
+        }
+        if (menu) {
+          menu.textContent = j.username;
+          menu.setAttribute("title", j.username);
+        }
+      }
+    } catch (_) {}
+  }
+
+  async function doLogout() {
+    try {
+      await apiFetch("/api/auth/logout", { method: "POST" });
+    } catch (_) {}
+    window.location.href = "/login";
+  }
+
+  document.getElementById("logout-desk")?.addEventListener("click", doLogout);
+  document.getElementById("logout-menu")?.addEventListener("click", doLogout);
 
   /** Só aplica se o utilizador estiver perto do fim; ao subir para ler, o streaming deixa de puxar a vista. */
   const LOG_BOTTOM_THRESHOLD_PX = 96;
@@ -464,7 +510,7 @@
     let endReason = "none";
 
     try {
-      const createRes = await fetch(apiUrl("/api/chat/jobs"), {
+      const createRes = await apiFetch("/api/chat/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -474,6 +520,10 @@
           top_p: 0.9,
         }),
       });
+      if (createRes.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
       if (!createRes.ok) {
         let detail = createRes.statusText;
         try {
@@ -492,7 +542,11 @@
       await acquireScreenWakeLock();
 
       for (;;) {
-        const stRes = await fetch(apiUrl("/api/chat/jobs/" + encodeURIComponent(jobId)), { signal });
+        const stRes = await apiFetch("/api/chat/jobs/" + encodeURIComponent(jobId), { signal });
+        if (stRes.status === 401) {
+          window.location.href = "/login";
+          return;
+        }
         if (!stRes.ok) {
           let det = stRes.statusText;
           try {
@@ -593,6 +647,7 @@
   autoResizeInput();
   updateSendState();
   updateEmptyState();
+  void loadSessionUser();
   refreshStatus();
   setInterval(refreshStatus, 8000);
 })();

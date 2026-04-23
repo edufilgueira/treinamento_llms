@@ -7,6 +7,8 @@ Evita repetir o custo de carregar vários GB em cada execução de inferir.py.
   cd <raiz do projeto> && python3 server/serve_lora.py
   # ou: ./server/serve.sh
 
+Só interface (auth + estáticos, **sem** carregar o modelo): --ui-only ou ORACULO_UI_ONLY=1
+
 Por defeito escuta em 0.0.0.0 (todas as interfaces): aceda com http://IP-DO-SERVIDOR:8765/
 Nesta máquina: http://127.0.0.1:8765/ — só local: --host 127.0.0.1
 """
@@ -17,17 +19,20 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import secrets
 import sys
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 _SERVER_DIR = Path(__file__).resolve().parent
 _PROJECT_ROOT = _SERVER_DIR.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
+if str(_SERVER_DIR) not in sys.path:
+    sys.path.insert(0, str(_SERVER_DIR))
 
 from data_config import (
     DEFAULT_ADAPTER_DIR,
@@ -41,22 +46,40 @@ apply_loading_progress_env()
 if not os.environ.get("PYTORCH_ALLOC_CONF"):
     os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from pydantic import BaseModel, Field, field_validator
+from starlette.middleware.sessions import SessionMiddleware
 
-from lora_engine import (
-    generate_chat_reply,
-    generate_chat_reply_stream,
-    load_lora_pipeline,
-)
+from auth_db import create_user, init_db, verify_user
 
 STATIC_DIR = _SERVER_DIR / "static"
 
 _gen_lock = threading.Lock()
 _engine: dict | None = None
+_ui_only: bool = False
 _startup_args: argparse.Namespace | None = None
+
+
+def _load_session_secret() -> str:
+    p = _SERVER_DIR / "data" / ".session_secret"
+    env = os.environ.get("ORACULO_SESSION_SECRET", "").strip()
+    if env:
+        return env
+    if p.is_file():
+        return p.read_text().strip()
+    s = secrets.token_urlsafe(32)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(s, encoding="utf-8")
+    try:
+        p.chmod(0o600)
+    except OSError:
+        pass
+    return s
+
+
+SESSION_SECRET = _load_session_secret()
 
 # Geração desacoplada: continua ainda que o cliente (telemóvel) corte a ligação; leitura por GET.
 _jobs_lock = threading.Lock()
@@ -88,7 +111,16 @@ def _parse_args() -> argparse.Namespace:
         f"Padrão: tentar {DEFAULT_MERGED_MODEL_DIR} se existir.",
     )
     p.add_argument("--trust_remote_code", action="store_true")
-    return p.parse_args()
+    p.add_argument(
+        "--ui-only",
+        action="store_true",
+        help="Não carrega o modelo: só autenticação e ficheiros estáticos. (Ou ORACULO_UI_ONLY=1.)",
+    )
+    args = p.parse_args()
+    v = os.environ.get("ORACULO_UI_ONLY", "").strip().lower()
+    if v in ("1", "true", "yes", "on"):
+        args.ui_only = True
+    return args
 
 
 def _resolve_merged_path(cli_path: Path | None) -> Path | None:
@@ -101,8 +133,29 @@ def _resolve_merged_path(cli_path: Path | None) -> Path | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _engine
+    global _engine, _ui_only
+    init_db()
+    print("Base de utilizadores SQLite: pronta.", flush=True)
     args = _startup_args if _startup_args is not None else _parse_args()
+    if args.ui_only:
+        _ui_only = True
+        _engine = None
+        print("Modo --ui-only: interface e API de auth; modelo não carregado.", flush=True)
+        if args.host in ("0.0.0.0", "::", "[::]"):
+            print(
+                f"Pronto. À escuta em {args.host}:{args.port} — nesta máquina: "
+                f"http://127.0.0.1:{args.port}/",
+                flush=True,
+            )
+        else:
+            print(f"Pronto. Servidor em http://{args.host}:{args.port}/", flush=True)
+        yield
+        _ui_only = False
+        return
+
+    _ui_only = False
+    from lora_engine import load_lora_pipeline
+
     merged = _resolve_merged_path(args.merged_model_dir)
     print("A carregar modelo (só uma vez; pode demorar)…", flush=True)
     try:
@@ -138,6 +191,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Oráculo LoRA local", lifespan=lifespan)
 
 app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    same_site="lax",
+    https_only=False,
+    max_age=14 * 24 * 60 * 60,
+)
+app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=False,
@@ -172,12 +232,93 @@ class JobStateOut(BaseModel):
     error: str | None = None
 
 
+class AuthIn(BaseModel):
+    username: str = Field(..., max_length=32)
+    password: str = Field(..., max_length=128)
+
+    @field_validator("username")
+    @classmethod
+    def _username_len(cls, v: str) -> str:
+        t = (v or "").strip()
+        if len(t) < 3 or len(t) > 32:
+            raise ValueError("Utilizador: entre 3 e 32 caracteres.")
+        return t
+
+    @field_validator("password")
+    @classmethod
+    def _password_len(cls, v: str) -> str:
+        if (v is None) or (len(v) < 8):
+            raise ValueError("Palavra-passe: pelo menos 8 caracteres.")
+        if len(v) > 128:
+            raise ValueError("Palavra-passe: no máximo 128 caracteres.")
+        return v
+
+
+def _require_user_id(request: Request) -> int:
+    uid = request.session.get("user_id")
+    if uid is None:
+        raise HTTPException(status_code=401, detail="Não autenticado.")
+    return int(uid)
+
+
+UserIdDep = Annotated[int, Depends(_require_user_id)]
+
+
+@app.post("/api/auth/register")
+async def auth_register(request: Request, body: AuthIn):
+    if not re.match(r"^[\w.-]{3,32}$", body.username, re.IGNORECASE):
+        raise HTTPException(
+            status_code=400,
+            detail="Utilizador: 3 a 32 caracteres (letras, números, _ . -).",
+        )
+    try:
+        uid, uname = create_user(body.username, body.password)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+    request.session["user_id"] = uid
+    request.session["username"] = uname
+    return {"ok": True, "username": uname}
+
+
+@app.post("/api/auth/login")
+async def auth_login(request: Request, body: AuthIn):
+    out = verify_user(body.username, body.password)
+    if not out:
+        raise HTTPException(
+            status_code=401, detail="Utilizador ou palavra-passe inválidos."
+        )
+    uid, uname = out
+    request.session["user_id"] = uid
+    request.session["username"] = uname
+    return {"ok": True, "username": uname}
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(request: Request):
+    request.session.clear()
+    return {"ok": True}
+
+
+@app.get("/api/auth/me")
+async def auth_me(request: Request):
+    uid = request.session.get("user_id")
+    if not uid:
+        return {"authenticated": False}
+    return {
+        "authenticated": True,
+        "user_id": int(uid),
+        "username": request.session.get("username", ""),
+    }
+
+
 def _run_generate(
     messages: list[dict],
     max_new_tokens: int,
     temperature: float,
     top_p: float,
 ) -> str:
+    from lora_engine import generate_chat_reply
+
     assert _engine is not None
     tokenizer = _engine["tokenizer"]
     model = _engine["model"]
@@ -208,6 +349,8 @@ def _sse_stream_locked(
     top_p: float,
     cancel_event: threading.Event,
 ):
+    from lora_engine import generate_chat_reply_stream
+
     assert _engine is not None
     tokenizer = _engine["tokenizer"]
     model = _engine["model"]
@@ -250,6 +393,8 @@ def _job_worker(
     temperature: float,
     top_p: float,
 ) -> None:
+    from lora_engine import generate_chat_reply_stream
+
     assert _engine is not None
     with _jobs_lock:
         st = _jobs.get(job_id)
@@ -299,8 +444,10 @@ async def _watch_client_disconnect(request: Request, cancel_event: threading.Eve
         return
 
 
-@app.get("/", response_class=HTMLResponse)
-async def index():
+@app.get("/")
+async def index(request: Request):
+    if not request.session.get("user_id"):
+        return RedirectResponse(url="/login", status_code=302)
     index_path = STATIC_DIR / "index.html"
     if not index_path.is_file():
         return HTMLResponse(
@@ -308,6 +455,30 @@ async def index():
             status_code=500,
         )
     return FileResponse(index_path, media_type="text/html; charset=utf-8")
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def page_login(request: Request):
+    if request.session.get("user_id"):
+        return RedirectResponse(url="/", status_code=302)
+    p = STATIC_DIR / "login.html"
+    if not p.is_file():
+        return HTMLResponse(
+            "<p>Falta server/static/login.html</p>", status_code=500
+        )
+    return FileResponse(p, media_type="text/html; charset=utf-8")
+
+
+@app.get("/registar", response_class=HTMLResponse)
+async def page_registar(request: Request):
+    if request.session.get("user_id"):
+        return RedirectResponse(url="/", status_code=302)
+    p = STATIC_DIR / "registar.html"
+    if not p.is_file():
+        return HTMLResponse(
+            "<p>Falta server/static/registar.html</p>", status_code=500
+        )
+    return FileResponse(p, media_type="text/html; charset=utf-8")
 
 
 def _file_response_or_404(path: Path, media_type: str) -> FileResponse:
@@ -338,20 +509,26 @@ async def serve_app_js_legacy():
 
 
 @app.get("/api/status")
-async def status():
+async def status(_uid: UserIdDep):
+    if _ui_only:
+        return {"loaded": False, "ui_only": True}
     if _engine is None:
-        return {"loaded": False}
+        return {"loaded": False, "ui_only": False}
     return {
         "loaded": True,
+        "ui_only": False,
         "mode": _engine["mode"],
         "model_name": _engine["model_name"],
     }
 
 
 @app.post("/api/chat", response_model=ChatOut)
-async def chat(body: ChatIn):
+async def chat(_uid: UserIdDep, body: ChatIn):
     if _engine is None:
-        raise HTTPException(status_code=503, detail="Modelo ainda não carregado.")
+        d = "Modo --ui-only (sem modelo). Suba o servidor sem --ui-only para o chat."
+        if not _ui_only:
+            d = "Modelo ainda não carregado."
+        raise HTTPException(status_code=503, detail=d)
     msgs = [{"role": m.role, "content": m.content} for m in body.messages]
     for m in msgs:
         if m["role"] not in ("user", "assistant", "system"):
@@ -373,9 +550,12 @@ async def chat(body: ChatIn):
 
 
 @app.post("/api/chat/stream")
-async def chat_stream(request: Request, body: ChatIn):
+async def chat_stream(request: Request, body: ChatIn, _uid: UserIdDep):
     if _engine is None:
-        raise HTTPException(status_code=503, detail="Modelo ainda não carregado.")
+        d = "Modo --ui-only (sem modelo). Suba o servidor sem --ui-only para o chat."
+        if not _ui_only:
+            d = "Modelo ainda não carregado."
+        raise HTTPException(status_code=503, detail=d)
     msgs = [{"role": m.role, "content": m.content} for m in body.messages]
     for m in msgs:
         if m["role"] not in ("user", "assistant", "system"):
@@ -408,10 +588,13 @@ async def chat_stream(request: Request, body: ChatIn):
 
 
 @app.post("/api/chat/jobs", response_model=JobCreateOut)
-async def create_chat_job(body: ChatIn):
+async def create_chat_job(_uid: UserIdDep, body: ChatIn):
     """Inicia geração em background; o cliente consulta com GET /api/chat/jobs/{id} (polling)."""
     if _engine is None:
-        raise HTTPException(status_code=503, detail="Modelo ainda não carregado.")
+        d = "Modo --ui-only (sem modelo). Suba o servidor sem --ui-only para o chat."
+        if not _ui_only:
+            d = "Modelo ainda não carregado."
+        raise HTTPException(status_code=503, detail=d)
     msgs = [{"role": m.role, "content": m.content} for m in body.messages]
     for m in msgs:
         if m["role"] not in ("user", "assistant", "system"):
@@ -437,7 +620,7 @@ async def create_chat_job(body: ChatIn):
 
 
 @app.get("/api/chat/jobs/{job_id}", response_model=JobStateOut)
-async def get_chat_job(job_id: str):
+async def get_chat_job(_uid: UserIdDep, job_id: str):
     with _jobs_lock:
         j = _jobs.get(job_id)
     if not j:
@@ -450,7 +633,7 @@ async def get_chat_job(job_id: str):
 
 
 @app.post("/api/chat/jobs/{job_id}/cancel")
-async def cancel_chat_job(job_id: str):
+async def cancel_chat_job(_uid: UserIdDep, job_id: str):
     with _jobs_lock:
         j = _jobs.get(job_id)
         if not j:

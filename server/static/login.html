@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Entrar — Oráculo Kiaiá</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body class="auth-page">
+  <div class="auth-card">
+    <h1 class="auth-title">Oráculo Kiaiá</h1>
+    <p class="auth-sub">Inicie sessão para continuar</p>
+    <form id="form" class="auth-form" novalidate>
+      <label class="auth-label" for="user">Usuario</label>
+      <input id="user" class="auth-input" type="text" name="username" autocomplete="username" required minlength="3" maxlength="32" pattern="[\\w.-]+" title="3–32 caracteres: letras, números, _ . -" />
+      <label class="auth-label" for="pass">Senha</label>
+      <input id="pass" class="auth-input" type="password" name="password" autocomplete="current-password" required minlength="8" maxlength="128" />
+      <p id="err" class="auth-err" hidden></p>
+      <button type="submit" class="auth-btn" id="btn">Entrar</button>
+    </form>
+    <!--<p class="auth-footer"><a href="/registar" class="auth-link">Criar conta</a></p>-->
+  </div>
+  <script>
+    (function () {
+      "use strict";
+      function apiUrl(p) { return p.startsWith("/") ? p : "/" + p; }
+      document.getElementById("form").addEventListener("submit", function (e) {
+        e.preventDefault();
+        const err = document.getElementById("err");
+        err.hidden = true;
+        const u = document.getElementById("user").value.trim();
+        const p = document.getElementById("pass").value;
+        const btn = document.getElementById("btn");
+        btn.disabled = true;
+        fetch(apiUrl("/api/auth/login"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ username: u, password: p }),
+        })
+          .then(function (r) {
+            if (r.ok) {
+              window.location.replace("/");
+              return;
+            }
+            return r.json().then(function (j) {
+              throw new Error(
+                (j && (j.detail || (typeof j.detail === "string" ? j.detail : null))) || r.statusText
+              );
+            });
+          })
+          .catch(function (x) {
+            err.textContent = x.message || "Erro de rede";
+            err.hidden = false;
+            btn.disabled = false;
+          });
+      });
+    })();
+  </script>
+</body>
+</html>

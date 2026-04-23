@@ -15,6 +15,10 @@
   <div id="mobile-menu" class="mobile-menu" aria-hidden="true">
     <div class="mobile-menu__panel" id="mobile-menu-panel">
       <p class="mobile-menu__brand">Oráculo Kiaiá</p>
+      <div class="mobile-menu__user">
+        <span class="user-name" id="user-name-menu" title=""></span>
+        <button type="button" class="btn-logout logout-btn" id="logout-menu">Sair</button>
+      </div>
       <button type="button" class="menu-new-chat" id="menu-new-chat">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M12 5v14M5 12h14"/>
@@ -58,6 +62,10 @@
                 <path d="m6 9 6 6 6-6"/>
               </svg>
             </button>
+          </div>
+          <div class="topbar__user desktop-only">
+            <span class="user-name" id="user-name-desk" title=""></span>
+            <button type="button" class="btn-logout logout-btn" id="logout-desk">Sair</button>
           </div>
           <span id="status" class="desktop-only">A ligar…</span>
         </header>
