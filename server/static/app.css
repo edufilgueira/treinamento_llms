@@ -214,21 +214,34 @@ body.menu-open {
   line-height: 1;
   letter-spacing: 0.02em;
   cursor: pointer;
-  opacity: 0.3;
+  opacity: 0;
+  pointer-events: none;
   transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.session-list__item:hover .session-list__kebab,
+.session-list__item:focus-within .session-list__kebab,
+.session-list__menu.is-open .session-list__kebab {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .session-list__kebab:hover,
 .session-list__kebab:focus-visible {
-  opacity: 0.95;
   background: var(--surface-hover, rgba(255, 255, 255, 0.06));
   outline: none;
 }
 
-.session-list__menu:hover .session-list__kebab,
-.session-list__menu.is-open .session-list__kebab,
-.session-list__menu:focus-within .session-list__kebab {
-  opacity: 0.9;
+/* Telemóvel / sem :hover: indicar ligeiramente o controlo (toque) */
+@media (hover: none) {
+  .session-list__kebab {
+    opacity: 0.35;
+    pointer-events: auto;
+  }
+  .session-list__item:active .session-list__kebab,
+  .session-list__menu.is-open .session-list__kebab {
+    opacity: 1;
+  }
 }
 
 .session-list__dropdown {
@@ -237,12 +250,13 @@ body.menu-open {
   right: 0;
   z-index: 30;
   margin-top: 0.15rem;
-  min-width: 7.5rem;
+  min-width: 9.5rem;
   padding: 0.2rem 0;
   border-radius: 0.45rem;
   background: #2c2c2c;
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  text-align: left;
   opacity: 0;
   visibility: hidden;
   transform: translateY(-4px);
@@ -250,9 +264,8 @@ body.menu-open {
   transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s;
 }
 
-.session-list__menu:hover .session-list__dropdown,
-.session-list__menu.is-open .session-list__dropdown,
-.session-list__menu:focus-within .session-list__dropdown {
+/* Submenu só com clique (classe is-open) */
+.session-list__menu.is-open .session-list__dropdown {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);
@@ -261,8 +274,11 @@ body.menu-open {
 
 .session-list__dd-item {
   display: flex;
+  flex-direction: row;
   align-items: center;
+  justify-content: flex-start;
   width: 100%;
+  box-sizing: border-box;
   margin: 0;
   border: none;
   background: transparent;
@@ -274,23 +290,24 @@ body.menu-open {
   cursor: pointer;
   font-family: inherit;
   transition: background 0.1s ease;
+  gap: 0.4rem;
+}
+
+.session-list__dd-ico {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.session-list__dd-item > span {
+  text-align: left;
 }
 
 .session-list__dd-item:hover,
 .session-list__dd-item:focus-visible {
   background: rgba(255, 255, 255, 0.08);
   outline: none;
-}
-
-.session-list__dd-item--icononly {
-  justify-content: center;
-  color: var(--text-secondary, #9a9a9a);
-  padding: 0.45rem 0.5rem;
-}
-
-.session-list__dd-item--icononly:hover,
-.session-list__dd-item--icononly:focus-visible {
-  color: var(--text, #ececec);
 }
 
 .mobile-sessions {

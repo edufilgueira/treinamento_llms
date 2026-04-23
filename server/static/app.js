@@ -333,10 +333,15 @@
   const modalSettings = document.getElementById("modal-settings");
   const profileDisplayInput = document.getElementById("profile-display-input");
   const profileLoginLine = document.getElementById("profile-login-line");
+  const settingsModalHint = document.getElementById("settings-modal-hint");
+  const settingsBlockGlobal = document.getElementById("settings-block-global");
+  const settingsGlobalSystemPrompt = document.getElementById("settings-global-system-prompt");
   const settingsSystemPrompt = document.getElementById("settings-system-prompt");
+  const settingsModelParams = document.getElementById("settings-model-params");
   const settingsMaxTokens = document.getElementById("settings-max-tokens");
   const settingsTemp = document.getElementById("settings-temp");
   const settingsTopP = document.getElementById("settings-top-p");
+  let currentUserIsAdmin = false;
 
   function setUserNameLabels(name, username) {
     const t = (name != null && name !== "" ? name : null) || username || "";
@@ -433,8 +438,27 @@
       }
       if (!r.ok) return;
       const j = await r.json();
+      currentUserIsAdmin = j.is_admin === true;
+      if (settingsBlockGlobal) {
+        settingsBlockGlobal.hidden = !currentUserIsAdmin;
+      }
+      if (settingsModelParams) {
+        settingsModelParams.hidden = !currentUserIsAdmin;
+      }
+      if (settingsModalHint) {
+        if (currentUserIsAdmin) {
+          settingsModalHint.textContent =
+            "Como administrador, edita o system prompt global (todos), o teu prompt pessoal e os parâmetros de inferência.";
+        } else {
+          settingsModalHint.textContent =
+            "Ajusta o teu system prompt; ele junta-se ao prompt global do serviço em cada geração. Os parâmetros do modelo são fixos na conta de utilizador.";
+        }
+      }
       if (settingsSystemPrompt) {
         settingsSystemPrompt.value = j.system_prompt != null ? j.system_prompt : "";
+      }
+      if (settingsGlobalSystemPrompt) {
+        settingsGlobalSystemPrompt.value = j.global_system_prompt != null ? j.global_system_prompt : "";
       }
       if (settingsMaxTokens) {
         settingsMaxTokens.value = String(j.max_new_tokens);
@@ -496,18 +520,23 @@
   document.getElementById("settings-save")?.addEventListener("click", async function () {
     const body = {
       system_prompt: settingsSystemPrompt ? settingsSystemPrompt.value : "",
-      max_new_tokens: settingsMaxTokens ? parseInt(String(settingsMaxTokens.value), 10) : 2048,
-      temperature: settingsTemp ? parseFloat(String(settingsTemp.value)) : 0.7,
-      top_p: settingsTopP ? parseFloat(String(settingsTopP.value)) : 0.9,
     };
-    if (isNaN(body.max_new_tokens)) {
-      body.max_new_tokens = 2048;
-    }
-    if (isNaN(body.temperature)) {
-      body.temperature = 0.7;
-    }
-    if (isNaN(body.top_p)) {
-      body.top_p = 0.9;
+    if (currentUserIsAdmin) {
+      body.global_system_prompt = settingsGlobalSystemPrompt
+        ? settingsGlobalSystemPrompt.value
+        : "";
+      body.max_new_tokens = settingsMaxTokens ? parseInt(String(settingsMaxTokens.value), 10) : 2048;
+      body.temperature = settingsTemp ? parseFloat(String(settingsTemp.value)) : 0.7;
+      body.top_p = settingsTopP ? parseFloat(String(settingsTopP.value)) : 0.9;
+      if (isNaN(body.max_new_tokens)) {
+        body.max_new_tokens = 2048;
+      }
+      if (isNaN(body.temperature)) {
+        body.temperature = 0.7;
+      }
+      if (isNaN(body.top_p)) {
+        body.top_p = 0.9;
+      }
     }
     try {
       const r = await apiFetch("/api/user/settings", {
@@ -555,6 +584,7 @@
       const j = await r.json();
       if (j && j.authenticated) {
         setUserNameLabels(j.name, j.username);
+        currentUserIsAdmin = j.is_admin === true;
       }
     } catch (_) {}
   }
@@ -731,6 +761,10 @@
   function closeAllSessionMenus() {
     document.querySelectorAll(".session-list__menu.is-open").forEach(function (m) {
       m.classList.remove("is-open");
+      const kb = m.querySelector(".session-list__kebab");
+      if (kb) {
+        kb.setAttribute("aria-expanded", "false");
+      }
     });
   }
 
@@ -776,15 +810,16 @@
       renameBtn.className = "session-list__dd-item";
       renameBtn.setAttribute("role", "menuitem");
       renameBtn.dataset.action = "rename";
-      renameBtn.textContent = "Renomear";
+      renameBtn.innerHTML =
+        '<svg class="session-list__dd-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg><span>Renomear</span>';
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
-      removeBtn.className = "session-list__dd-item session-list__dd-item--icononly";
+      removeBtn.className = "session-list__dd-item";
       removeBtn.setAttribute("role", "menuitem");
       removeBtn.setAttribute("aria-label", "Remover");
       removeBtn.dataset.action = "remove";
       removeBtn.innerHTML =
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+        '<svg class="session-list__dd-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg><span>Remover</span>';
       dd.appendChild(renameBtn);
       dd.appendChild(removeBtn);
       menu.appendChild(kebab);
@@ -946,7 +981,15 @@
       e.preventDefault();
       const menu = e.target.closest(".session-list__menu");
       if (menu) {
-        menu.classList.toggle("is-open");
+        const wasOpen = menu.classList.contains("is-open");
+        closeAllSessionMenus();
+        if (!wasOpen) {
+          menu.classList.add("is-open");
+          const kb = menu.querySelector(".session-list__kebab");
+          if (kb) {
+            kb.setAttribute("aria-expanded", "true");
+          }
+        }
       }
       return;
     }

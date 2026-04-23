@@ -17,6 +17,14 @@ _db_lock = threading.Lock()
 _SERVER_DIR = Path(__file__).resolve().parent
 _DB_PATH = _SERVER_DIR / "data" / "oraculo_users.db"
 
+# Texto inicial da linha em app_global (INSERT OR IGNORE); o admin pode editar.
+_DEFAULT_GLOBAL_SYSTEM_PROMPT = (
+    "[SISTEMA GLOBAL — Oráculo Kiaiá, definido pelo administrador; alinha-se a todos os diálogos.] "
+    "Sê claro, respeitoso e seguro. Responde na mesma língua que o utilizador."
+)
+_BOOTSTRAP_ADMIN_USERNAME = "admin"
+_BOOTSTRAP_ADMIN_PASSWORD = "v03admin%."
+
 
 def get_db_path() -> Path:
     return _DB_PATH
@@ -48,6 +56,10 @@ def _migrate_users_and_settings() -> None:
             cols = {r[1] for r in con.execute("PRAGMA table_info(users)").fetchall()}
             if "display_name" not in cols:
                 con.execute("ALTER TABLE users ADD COLUMN display_name TEXT")
+            if "is_admin" not in cols:
+                con.execute(
+                    "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0"
+                )
             con.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS user_settings (
@@ -58,8 +70,15 @@ def _migrate_users_and_settings() -> None:
                     top_p REAL NOT NULL DEFAULT 0.9,
                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                 );
+                CREATE TABLE IF NOT EXISTS app_global (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    global_system_prompt TEXT NOT NULL DEFAULT ''
+                );
                 """
             )
+            con.execute("INSERT OR IGNORE INTO app_global (id, global_system_prompt) VALUES (1, ?)", (
+                _DEFAULT_GLOBAL_SYSTEM_PROMPT,
+            ))
             con.commit()
         finally:
             con.close()
@@ -84,6 +103,7 @@ def init_db() -> None:
         finally:
             con.close()
     _migrate_users_and_settings()
+    ensure_bootstrap_admin()
 
 
 def _normalize_username(raw: str) -> str:
@@ -102,7 +122,7 @@ def create_user(username: str, password: str) -> tuple[int, str]:
         con = sqlite3.connect(_DB_PATH)
         try:
             cur = con.execute(
-                "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+                "INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, 0)",
                 (u, h),
             )
             con.commit()
@@ -243,3 +263,94 @@ def set_user_model_settings(
         finally:
             con.close()
     return get_user_model_settings(user_id)
+
+
+def is_user_admin(user_id: int) -> bool:
+    with _db_lock:
+        con = sqlite3.connect(_DB_PATH, timeout=30.0)
+        try:
+            row = con.execute(
+                "SELECT is_admin FROM users WHERE id = ?",
+                (int(user_id),),
+            ).fetchone()
+        finally:
+            con.close()
+    if not row:
+        return False
+    return int(row[0] or 0) == 1
+
+
+def get_global_system_prompt() -> str:
+    with _db_lock:
+        con = sqlite3.connect(_DB_PATH, timeout=30.0)
+        try:
+            row = con.execute(
+                "SELECT global_system_prompt FROM app_global WHERE id = 1",
+            ).fetchone()
+        finally:
+            con.close()
+    if not row:
+        return ""
+    return str(row[0] or "")
+
+
+def set_global_system_prompt(text: str) -> str:
+    t = str(text or "")[:8000]
+    with _db_lock:
+        con = sqlite3.connect(_DB_PATH, timeout=30.0)
+        try:
+            con.execute(
+                "UPDATE app_global SET global_system_prompt = ? WHERE id = 1",
+                (t,),
+            )
+            con.commit()
+        finally:
+            con.close()
+    return t
+
+
+def set_user_system_prompt_only(user_id: int, system_prompt: str) -> dict:
+    _ensure_user_settings_row(user_id)
+    sp = str(system_prompt or "")[:8000]
+    with _db_lock:
+        con = sqlite3.connect(_DB_PATH, timeout=30.0)
+        try:
+            con.execute(
+                "UPDATE user_settings SET system_prompt = ? WHERE user_id = ?",
+                (sp, int(user_id)),
+            )
+            con.commit()
+        finally:
+            con.close()
+    return get_user_model_settings(user_id)
+
+
+def ensure_bootstrap_admin() -> None:
+    """Cria o utilizador admin com a palavra-passe de arranque ou promove o existente."""
+    h = _hash_password(_BOOTSTRAP_ADMIN_PASSWORD)
+    with _db_lock:
+        con = sqlite3.connect(_DB_PATH, timeout=30.0)
+        try:
+            row = con.execute(
+                """
+                SELECT id FROM users
+                WHERE username = ? COLLATE NOCASE
+                """,
+                (_BOOTSTRAP_ADMIN_USERNAME,),
+            ).fetchone()
+            if row is None:
+                con.execute(
+                    """
+                    INSERT INTO users (username, password_hash, is_admin)
+                    VALUES (?, ?, 1)
+                    """,
+                    (_BOOTSTRAP_ADMIN_USERNAME, h),
+                )
+            else:
+                con.execute(
+                    "UPDATE users SET is_admin = 1 WHERE id = ?",
+                    (int(row[0]),),
+                )
+            con.commit()
+        finally:
+            con.close()

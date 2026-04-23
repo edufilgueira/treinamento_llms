@@ -54,11 +54,15 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from auth_db import (
     create_user,
+    get_global_system_prompt,
     get_user_model_settings,
     get_user_names,
     init_db,
+    is_user_admin,
+    set_global_system_prompt,
     set_user_display_name,
     set_user_model_settings,
+    set_user_system_prompt_only,
     verify_user,
 )
 from chat_sessions_db import (
@@ -101,6 +105,11 @@ def _load_session_secret() -> str:
 
 
 SESSION_SECRET = _load_session_secret()
+
+# Parâmetros de inferência para contas normais (não alteráveis via UI; o admin ajusta as suas).
+_DEFAULT_MAX_NEW = 2048
+_DEFAULT_TEMP = 0.7
+_DEFAULT_TOP_P = 0.9
 
 # Geração desacoplada: continua ainda que o cliente (telemóvel) corte a ligação; leitura por GET.
 _jobs_lock = threading.Lock()
@@ -274,13 +283,16 @@ class UserProfileUpdate(BaseModel):
 
 class UserModelSettingsIn(BaseModel):
     system_prompt: str | None = None
+    global_system_prompt: str | None = None
     max_new_tokens: int | None = Field(None, ge=16, le=4096)
     temperature: float | None = Field(None, ge=0.01, le=2.0)
     top_p: float | None = Field(None, ge=0.05, le=1.0)
 
 
 class UserModelSettingsOut(BaseModel):
+    is_admin: bool
     system_prompt: str
+    global_system_prompt: str
     max_new_tokens: int
     temperature: float
     top_p: float
@@ -316,6 +328,59 @@ def _require_user_id(request: Request) -> int:
 
 
 UserIdDep = Annotated[int, Depends(_require_user_id)]
+
+
+def _user_settings_out(uid: int) -> UserModelSettingsOut:
+    s = get_user_model_settings(int(uid))
+    admin = is_user_admin(int(uid))
+    g = get_global_system_prompt() if admin else ""
+    if admin:
+        return UserModelSettingsOut(
+            is_admin=True,
+            system_prompt=s["system_prompt"],
+            global_system_prompt=g,
+            max_new_tokens=s["max_new_tokens"],
+            temperature=s["temperature"],
+            top_p=s["top_p"],
+        )
+    return UserModelSettingsOut(
+        is_admin=False,
+        system_prompt=s["system_prompt"],
+        global_system_prompt="",
+        max_new_tokens=_DEFAULT_MAX_NEW,
+        temperature=_DEFAULT_TEMP,
+        top_p=_DEFAULT_TOP_P,
+    )
+
+
+def _merge_system_blocks(global_text: str, user_text: str) -> str | None:
+    g = (global_text or "").strip()
+    u = (user_text or "").strip()
+    if g and u:
+        return f"{g}\n\n{u}"
+    if g:
+        return g
+    if u:
+        return u
+    return None
+
+
+def _chat_messages_for_user(user_id: int, base: list[dict]) -> list[dict]:
+    prefs = get_user_model_settings(int(user_id))
+    gsp = get_global_system_prompt()
+    no_client_system = [m for m in base if m.get("role") != "system"]
+    usp = (prefs.get("system_prompt") or "").strip()
+    merged = _merge_system_blocks(gsp, usp)
+    if merged:
+        return [{"role": "system", "content": merged}, *no_client_system]
+    return no_client_system
+
+
+def _infer_params_for_user(user_id: int) -> tuple[int, float, float]:
+    if is_user_admin(int(user_id)):
+        p = get_user_model_settings(int(user_id))
+        return int(p["max_new_tokens"]), float(p["temperature"]), float(p["top_p"])
+    return _DEFAULT_MAX_NEW, _DEFAULT_TEMP, _DEFAULT_TOP_P
 
 
 @app.post("/api/auth/register")
@@ -367,6 +432,7 @@ async def auth_me(request: Request):
             "username": uname,
             "display_name": None,
             "name": uname,
+            "is_admin": is_user_admin(int(uid)),
         }
     return {
         "authenticated": True,
@@ -374,6 +440,7 @@ async def auth_me(request: Request):
         "username": names["username"],
         "display_name": names.get("display_name") or None,
         "name": names["name"],
+        "is_admin": is_user_admin(int(uid)),
     }
 
 
@@ -405,30 +472,27 @@ async def user_patch_profile(_uid: UserIdDep, body: UserProfileUpdate):
 
 @app.get("/api/user/settings", response_model=UserModelSettingsOut)
 async def user_get_settings(_uid: UserIdDep):
-    s = get_user_model_settings(int(_uid))
-    return UserModelSettingsOut(
-        system_prompt=s["system_prompt"],
-        max_new_tokens=s["max_new_tokens"],
-        temperature=s["temperature"],
-        top_p=s["top_p"],
-    )
+    return _user_settings_out(int(_uid))
 
 
 @app.patch("/api/user/settings", response_model=UserModelSettingsOut)
 async def user_patch_settings(_uid: UserIdDep, body: UserModelSettingsIn):
-    s = set_user_model_settings(
-        int(_uid),
-        system_prompt=body.system_prompt,
-        max_new_tokens=body.max_new_tokens,
-        temperature=body.temperature,
-        top_p=body.top_p,
-    )
-    return UserModelSettingsOut(
-        system_prompt=s["system_prompt"],
-        max_new_tokens=s["max_new_tokens"],
-        temperature=s["temperature"],
-        top_p=s["top_p"],
-    )
+    uid = int(_uid)
+    admin = is_user_admin(uid)
+    if admin:
+        if body.global_system_prompt is not None:
+            set_global_system_prompt(body.global_system_prompt)
+        set_user_model_settings(
+            uid,
+            system_prompt=body.system_prompt,
+            max_new_tokens=body.max_new_tokens,
+            temperature=body.temperature,
+            top_p=body.top_p,
+        )
+    else:
+        if body.system_prompt is not None:
+            set_user_system_prompt_only(uid, body.system_prompt)
+    return _user_settings_out(uid)
 
 
 def _clean_title_text(raw: str) -> str:
@@ -723,19 +787,19 @@ async def chat(_uid: UserIdDep, body: ChatIn):
         if not _ui_only:
             d = "Modelo ainda não carregado."
         raise HTTPException(status_code=503, detail=d)
-    msgs = [{"role": m.role, "content": m.content} for m in body.messages]
-    for m in msgs:
+    base = [{"role": m.role, "content": m.content} for m in body.messages]
+    for m in base:
         if m["role"] not in ("user", "assistant", "system"):
             raise HTTPException(status_code=400, detail="role inválido.")
+    uid = int(_uid)
+    msgs = _chat_messages_for_user(uid, base)
+    mnt, temp, top_p = _infer_params_for_user(uid)
 
     loop = asyncio.get_event_loop()
     try:
         reply = await loop.run_in_executor(
             None,
-            lambda m=msgs,
-            mt=body.max_new_tokens,
-            t=body.temperature,
-            tp=body.top_p: _run_generate_locked(m, mt, t, tp),
+            lambda m=msgs, mt=mnt, t=temp, tp=top_p: _run_generate_locked(m, mt, t, tp),
         )
     except Exception as err:
         raise HTTPException(status_code=500, detail=str(err)) from err
@@ -750,10 +814,13 @@ async def chat_stream(request: Request, body: ChatIn, _uid: UserIdDep):
         if not _ui_only:
             d = "Modelo ainda não carregado."
         raise HTTPException(status_code=503, detail=d)
-    msgs = [{"role": m.role, "content": m.content} for m in body.messages]
-    for m in msgs:
+    base = [{"role": m.role, "content": m.content} for m in body.messages]
+    for m in base:
         if m["role"] not in ("user", "assistant", "system"):
             raise HTTPException(status_code=400, detail="role inválido.")
+    uid = int(_uid)
+    msgs = _chat_messages_for_user(uid, base)
+    mnt, temp, top_p = _infer_params_for_user(uid)
 
     cancel_event = threading.Event()
     disconnect_task = asyncio.create_task(_watch_client_disconnect(request, cancel_event))
@@ -762,9 +829,9 @@ async def chat_stream(request: Request, body: ChatIn, _uid: UserIdDep):
         try:
             yield from _sse_stream_locked(
                 msgs,
-                body.max_new_tokens,
-                body.temperature,
-                body.top_p,
+                mnt,
+                temp,
+                top_p,
                 cancel_event,
             )
         finally:
@@ -835,14 +902,9 @@ async def create_chat_job(_uid: UserIdDep, body: ChatJobIn):
     for m in base:
         if m["role"] not in ("user", "assistant", "system"):
             raise HTTPException(status_code=400, detail="role inválido.")
-    prefs = get_user_model_settings(int(_uid))
-    no_client_system = [m for m in base if m.get("role") != "system"]
-    sp = (prefs.get("system_prompt") or "").strip()
-    if sp:
-        msgs = [{"role": "system", "content": sp}, *no_client_system]
-    else:
-        msgs = no_client_system
-    mnt, temp, tp = int(prefs["max_new_tokens"]), float(prefs["temperature"]), float(prefs["top_p"])
+    uid = int(_uid)
+    msgs = _chat_messages_for_user(uid, base)
+    mnt, temp, tp = _infer_params_for_user(uid)
     _prune_completed_jobs_if_needed()
     job_id = secrets.token_urlsafe(16)
     cancel_event = threading.Event()

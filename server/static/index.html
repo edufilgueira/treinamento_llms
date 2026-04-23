@@ -198,10 +198,28 @@
         <h2 class="modal__title" id="modal-settings-title">Configurações do modelo</h2>
         <button type="button" class="modal__close" id="modal-settings-close" aria-label="Fechar">×</button>
       </div>
-      <p class="modal__hint">Estas definições aplicam-se às tuas gerações (system prompt e parâmetros enviados ao modelo).</p>
-      <label class="modal__label" for="settings-system-prompt">System prompt</label>
-      <textarea id="settings-system-prompt" class="modal__textarea" rows="8" placeholder="Deixa vazio se não quiseres instrução de sistema adicional."></textarea>
-      <div class="modal__grid-3">
+      <p class="modal__hint" id="settings-modal-hint">
+        Ajusta o teu system prompt; ele junta-se ao prompt global (definido pelo administrador) em cada geração.
+      </p>
+      <div id="settings-block-global" hidden>
+        <label class="modal__label" for="settings-global-system-prompt"
+          >System prompt global (todos os utilizadores)</label
+        >
+        <textarea
+          id="settings-global-system-prompt"
+          class="modal__textarea"
+          rows="6"
+          placeholder="Instrução de sistema aplicada a todas as contas. Junta-se antes do teu system prompt pessoal."
+        ></textarea>
+      </div>
+      <label class="modal__label" for="settings-system-prompt">System prompt (só a tua conta)</label>
+      <textarea
+        id="settings-system-prompt"
+        class="modal__textarea"
+        rows="8"
+        placeholder="Instrução adicional só para a tua conta. Junta-se depois do prompt global. Opcional."
+      ></textarea>
+      <div class="modal__grid-3" id="settings-model-params" hidden>
         <div>
           <label class="modal__label" for="settings-max-tokens">Máx. tokens novos</label>
           <input type="number" id="settings-max-tokens" class="modal__input" min="16" max="4096" step="1" />
