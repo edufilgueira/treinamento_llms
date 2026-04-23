@@ -11,5 +11,8 @@ nohup ./serve.sh > app.log 2>&1 &
 ps aux | grep python
 
 
+tail -f ~/treinamento_llms/server/app.log
+
+
 
 2.57.91.91
