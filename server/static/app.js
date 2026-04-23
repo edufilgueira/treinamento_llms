@@ -284,6 +284,12 @@
     document.body.classList.remove("menu-open");
   }
 
+  function closeMobileMenuIfOpen() {
+    if (MEDIA_MOBILE.matches && mobileMenu && mobileMenu.classList.contains("is-open")) {
+      closeMobileMenu();
+    }
+  }
+
   function toggleMobileMenu() {
     if (!mobileMenu) return;
     if (mobileMenu.classList.contains("is-open")) closeMobileMenu();
@@ -996,6 +1002,7 @@
   async function openSession(sid, opts) {
     if (sendBtn.dataset.busy === "1") return;
     if (String(sid) === String(currentSessionId) && !(opts && opts.fromBoot)) {
+      closeMobileMenuIfOpen();
       return;
     }
     const r = await apiFetch("/api/sessions/" + encodeURIComponent(sid));
@@ -1022,9 +1029,7 @@
     }
     updateEmptyState();
     scrollLog();
-    if (MEDIA_MOBILE.matches && mobileMenu && mobileMenu.classList.contains("is-open")) {
-      closeMobileMenu();
-    }
+    closeMobileMenuIfOpen();
     void loadSessionList();
   }
 
