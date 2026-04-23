@@ -92,6 +92,73 @@ body.menu-open {
   opacity: 0.85;
 }
 
+.sessions-recent {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  margin-top: 0.6rem;
+}
+
+.sessions-recent__label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary, #9a9a9a);
+  margin: 0 0 0.4rem 0.15rem;
+}
+
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.session-list__item {
+  margin: 0.1rem 0;
+}
+
+.session-list__btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--text, #ececec);
+  font-size: 0.8rem;
+  line-height: 1.3;
+  padding: 0.5rem 0.55rem;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  transition: background 0.12s ease;
+}
+
+.session-list__btn:hover {
+  background: var(--surface-hover, rgba(255, 255, 255, 0.06));
+}
+
+.session-list__item--active .session-list__btn {
+  background: rgba(255, 255, 255, 0.1);
+  font-weight: 500;
+}
+
+.mobile-sessions {
+  max-height: 40vh;
+  margin-top: 0.5rem;
+}
+
 /* Área principal */
 
 .main-wrap {

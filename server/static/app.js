@@ -18,8 +18,12 @@
   const menuToggle = document.getElementById("menu-toggle");
   const mobileMenu = document.getElementById("mobile-menu");
   const mobileMenuPanel = document.getElementById("mobile-menu-panel");
+  const sessionListEl = document.getElementById("session-list");
+  const sessionListMenuEl = document.getElementById("session-list-menu");
 
   const history = [];
+  let currentSessionId = null;
+  let lastSessions = [];
 
   /** AbortController do pedido (polling) atual; Parar = abort. */
   let streamAborter = null;
@@ -435,7 +439,8 @@
 
   function appendMessage(role, content) {
     const stack = document.createElement("div");
-    stack.className = "msg-stack msg-stack--user";
+    stack.className =
+      "msg-stack " + (role === "assistant" ? "msg-stack--assistant" : "msg-stack--user");
     const bubble = document.createElement("div");
     bubble.className = "msg " + role;
     const textEl = document.createElement("span");
@@ -482,13 +487,165 @@
     inputEl.focus();
   }
 
-  newChatBtn.addEventListener("click", clearChat);
-  mobileNewChatBtn.addEventListener("click", clearChat);
-  menuNewChatBtn.addEventListener("click", clearChat);
+  function buildSessionItem(s) {
+    const li = document.createElement("li");
+    li.className =
+      "session-list__item" +
+      (String(s.id) === String(currentSessionId) ? " session-list__item--active" : "");
+    li.dataset.sid = String(s.id);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "session-list__btn";
+    btn.textContent = s.title || "Conversa";
+    li.appendChild(btn);
+    return li;
+  }
+
+  function renderSessionList() {
+    if (!sessionListEl || !sessionListMenuEl) return;
+    sessionListEl.innerHTML = "";
+    sessionListMenuEl.innerHTML = "";
+    (lastSessions || []).forEach(function (s) {
+      sessionListEl.appendChild(buildSessionItem(s));
+      sessionListMenuEl.appendChild(buildSessionItem(s));
+    });
+  }
+
+  async function loadSessionList() {
+    const r = await apiFetch("/api/sessions");
+    if (r.status === 401) return;
+    if (!r.ok) return;
+    const j = await r.json();
+    lastSessions = j.sessions || [];
+    renderSessionList();
+  }
+
+  async function openSession(sid, opts) {
+    if (sendBtn.dataset.busy === "1") return;
+    if (String(sid) === String(currentSessionId) && !(opts && opts.fromBoot)) {
+      return;
+    }
+    const r = await apiFetch("/api/sessions/" + encodeURIComponent(sid));
+    if (r.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+    if (!r.ok) {
+      void loadSessionList();
+      return;
+    }
+    const d = await r.json();
+    currentSessionId = d.id;
+    setCopyPinnedStack(null);
+    history.length = 0;
+    logInner.innerHTML = "";
+    const msgs = d.messages || [];
+    for (let i = 0; i < msgs.length; i++) {
+      const m = msgs[i];
+      if (m.role === "user" || m.role === "assistant") {
+        history.push({ role: m.role, content: m.content });
+        appendMessage(m.role, m.content);
+      }
+    }
+    updateEmptyState();
+    scrollLog();
+    if (MEDIA_MOBILE.matches && mobileMenu && mobileMenu.classList.contains("is-open")) {
+      closeMobileMenu();
+    }
+    void loadSessionList();
+  }
+
+  function onSessionListClick(e) {
+    const btn = e.target.closest(".session-list__btn");
+    if (!btn) return;
+    const li = btn.closest("li");
+    if (!li || li.dataset.sid == null) return;
+    void openSession(li.dataset.sid, { force: true });
+  }
+  if (sessionListEl) {
+    sessionListEl.addEventListener("click", onSessionListClick);
+  }
+  if (sessionListMenuEl) {
+    sessionListMenuEl.addEventListener("click", onSessionListClick);
+  }
+
+  async function ensureSession() {
+    if (currentSessionId != null) return true;
+    const r = await apiFetch("/api/sessions", { method: "POST" });
+    if (r.status === 401) {
+      window.location.href = "/login";
+      return false;
+    }
+    if (!r.ok) return false;
+    const j = await r.json();
+    currentSessionId = j.id;
+    await loadSessionList();
+    return true;
+  }
+
+  async function newChat() {
+    if (sendBtn.dataset.busy === "1") return;
+    const r = await apiFetch("/api/sessions", { method: "POST" });
+    if (r.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+    if (!r.ok) return;
+    const j = await r.json();
+    currentSessionId = j.id;
+    clearChat();
+    await loadSessionList();
+  }
+
+  async function bootChats() {
+    const r = await apiFetch("/api/sessions");
+    if (r.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+    const j = await r.json();
+    const sessions = j.sessions || [];
+    if (sessions.length === 0) {
+      const cr = await apiFetch("/api/sessions", { method: "POST" });
+      if (cr.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+      if (!cr.ok) return;
+      const cj = await cr.json();
+      currentSessionId = cj.id;
+      lastSessions = [
+        { id: cj.id, title: cj.title, created_at: "", updated_at: "" },
+      ];
+      renderSessionList();
+      return;
+    }
+    lastSessions = sessions;
+    currentSessionId = sessions[0].id;
+    renderSessionList();
+    await openSession(sessions[0].id, { fromBoot: true });
+  }
+
+  if (newChatBtn) {
+    newChatBtn.addEventListener("click", function () {
+      void newChat();
+    });
+  }
+  if (mobileNewChatBtn) {
+    mobileNewChatBtn.addEventListener("click", function () {
+      void newChat();
+    });
+  }
+  if (menuNewChatBtn) {
+    menuNewChatBtn.addEventListener("click", function () {
+      void newChat();
+    });
+  }
 
   async function send() {
     const text = inputEl.value.trim();
     if (!text) return;
+    if (!(await ensureSession())) return;
     const ac = new AbortController();
     streamAborter = ac;
     const signal = ac.signal;
@@ -518,6 +675,7 @@
           max_new_tokens: 2048,
           temperature: 0.7,
           top_p: 0.9,
+          session_id: currentSessionId,
         }),
       });
       if (createRes.status === 401) {
@@ -607,6 +765,7 @@
       }
       delete sendBtn.dataset.busy;
       updateSendState();
+      void loadSessionList();
       inputEl.focus();
     }
   }
@@ -647,7 +806,10 @@
   autoResizeInput();
   updateSendState();
   updateEmptyState();
-  void loadSessionUser();
-  refreshStatus();
+  void (async function initPage() {
+    await loadSessionUser();
+    await bootChats();
+    refreshStatus();
+  })();
   setInterval(refreshStatus, 8000);
 })();

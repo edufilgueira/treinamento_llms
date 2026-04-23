@@ -53,6 +53,17 @@ from pydantic import BaseModel, Field, field_validator
 from starlette.middleware.sessions import SessionMiddleware
 
 from auth_db import create_user, init_db, verify_user
+from chat_sessions_db import (
+    DEFAULT_SESSION_TITLE,
+    append_turn,
+    create_session,
+    delete_session,
+    get_session_messages,
+    init_chat_tables,
+    list_sessions,
+    set_session_title_from_model,
+    should_generate_title,
+)
 
 STATIC_DIR = _SERVER_DIR / "static"
 
@@ -135,7 +146,8 @@ def _resolve_merged_path(cli_path: Path | None) -> Path | None:
 async def lifespan(app: FastAPI):
     global _engine, _ui_only
     init_db()
-    print("Base de utilizadores SQLite: pronta.", flush=True)
+    init_chat_tables()
+    print("Base de utilizadores e sessões de chat: pronta.", flush=True)
     args = _startup_args if _startup_args is not None else _parse_args()
     if args.ui_only:
         _ui_only = True
@@ -216,6 +228,16 @@ class ChatIn(BaseModel):
     max_new_tokens: int = Field(2048, ge=16, le=4096)
     temperature: float = Field(0.7, ge=0.01, le=2.0)
     top_p: float = Field(0.9, ge=0.05, le=1.0)
+
+
+class ChatJobIn(BaseModel):
+    """Pedido de job de chat: igual a ChatIn, com sessão persistida opcional."""
+
+    messages: list[Message] = Field(..., min_length=1)
+    max_new_tokens: int = Field(2048, ge=16, le=4096)
+    temperature: float = Field(0.7, ge=0.01, le=2.0)
+    top_p: float = Field(0.9, ge=0.05, le=1.0)
+    session_id: int | None = None
 
 
 class ChatOut(BaseModel):
@@ -311,6 +333,62 @@ async def auth_me(request: Request):
     }
 
 
+def _clean_title_text(raw: str) -> str:
+    s = (raw or "").strip()
+    s = s.split("\n", 1)[0].strip()
+    s = s.strip("«»\"'“”`•-–—:")
+    s = re.sub(r"\s+", " ", s)
+    return s[:200] if s else ""
+
+
+def _fallback_title_from_user_line(user_line: str) -> str:
+    t = re.sub(r"\s+", " ", (user_line or "").strip())[:64]
+    return t or "Conversa"
+
+
+def _title_after_turn(user_id: int, session_id: int, last_user: str, assistant: str) -> None:
+    if not should_generate_title(user_id, session_id):
+        return
+    if _ui_only or _engine is None:
+        set_session_title_from_model(
+            user_id, session_id, _fallback_title_from_user_line(last_user)
+        )
+        return
+    from lora_engine import generate_chat_reply
+
+    tmsgs: list[dict] = [
+        {
+            "role": "user",
+            "content": (
+                "Gera um título muito curto (máximo 6 palavras) em português para a conversa abaixo. "
+                "Responde só com o título, uma linha, sem aspas e sem ponto no fim.\n\n"
+                f"Utilizador: {last_user[:2000]}\n\n"
+                f"Assistente: {assistant[:2000]}"
+            ),
+        }
+    ]
+    with _gen_lock:
+        if _engine is None:
+            set_session_title_from_model(
+                user_id, session_id, _fallback_title_from_user_line(last_user)
+            )
+            return
+        try:
+            raw = generate_chat_reply(
+                _engine["tokenizer"],
+                _engine["model"],
+                tmsgs,
+                max_new_tokens=64,
+                temperature=0.4,
+                top_p=0.9,
+            )
+        except Exception:
+            raw = ""
+    title = _clean_title_text(raw) or _fallback_title_from_user_line(last_user)
+    if title and should_generate_title(user_id, session_id):
+        set_session_title_from_model(user_id, session_id, title)
+
+
 def _run_generate(
     messages: list[dict],
     max_new_tokens: int,
@@ -392,6 +470,8 @@ def _job_worker(
     max_new_tokens: int,
     temperature: float,
     top_p: float,
+    session_id: int | None = None,
+    user_id: int | None = None,
 ) -> None:
     from lora_engine import generate_chat_reply_stream
 
@@ -426,6 +506,20 @@ def _job_worker(
                 j["status"] = "cancelled"
             else:
                 j["status"] = "done"
+            is_done = j["status"] == "done" and not j["cancel_event"].is_set()
+            asst_text = (j.get("text") or "") if is_done else ""
+        if is_done and session_id and user_id and asst_text.strip():
+            last_u = ""
+            for m in reversed(messages):
+                if m.get("role") == "user":
+                    last_u = str(m.get("content", ""))
+                    break
+            if last_u and append_turn(int(user_id), int(session_id), last_u, asst_text):
+                threading.Thread(
+                    target=_title_after_turn,
+                    args=(int(user_id), int(session_id), last_u, asst_text),
+                    daemon=True,
+                ).start()
     except Exception as err:  # noqa: BLE001
         with _jobs_lock:
             if job_id in _jobs:
@@ -587,14 +681,44 @@ async def chat_stream(request: Request, body: ChatIn, _uid: UserIdDep):
     )
 
 
+@app.get("/api/sessions")
+async def api_list_sessions(_uid: UserIdDep):
+    return {"sessions": list_sessions(int(_uid))}
+
+
+@app.post("/api/sessions")
+async def api_new_session(_uid: UserIdDep):
+    sid = create_session(int(_uid))
+    return {"id": sid, "title": DEFAULT_SESSION_TITLE}
+
+
+@app.get("/api/sessions/{session_id}")
+async def api_get_session(_uid: UserIdDep, session_id: int):
+    out = get_session_messages(int(_uid), session_id)
+    if out is None:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada.")
+    messages, title = out
+    return {"id": session_id, "title": title, "messages": messages}
+
+
+@app.delete("/api/sessions/{session_id}")
+async def api_delete_session(_uid: UserIdDep, session_id: int):
+    if not delete_session(int(_uid), session_id):
+        raise HTTPException(status_code=404, detail="Sessão não encontrada.")
+    return {"ok": True}
+
+
 @app.post("/api/chat/jobs", response_model=JobCreateOut)
-async def create_chat_job(_uid: UserIdDep, body: ChatIn):
+async def create_chat_job(_uid: UserIdDep, body: ChatJobIn):
     """Inicia geração em background; o cliente consulta com GET /api/chat/jobs/{id} (polling)."""
     if _engine is None:
         d = "Modo --ui-only (sem modelo). Suba o servidor sem --ui-only para o chat."
         if not _ui_only:
             d = "Modelo ainda não carregado."
         raise HTTPException(status_code=503, detail=d)
+    if body.session_id is not None:
+        if get_session_messages(int(_uid), body.session_id) is None:
+            raise HTTPException(status_code=404, detail="Sessão não encontrada.")
     msgs = [{"role": m.role, "content": m.content} for m in body.messages]
     for m in msgs:
         if m["role"] not in ("user", "assistant", "system"):
@@ -609,9 +733,19 @@ async def create_chat_job(_uid: UserIdDep, body: ChatIn):
             "error": None,
             "cancel_event": cancel_event,
         }
+    session_id: int | None = body.session_id
+    user_id: int = int(_uid)
     thread = threading.Thread(
         target=_job_worker,
-        args=(job_id, msgs, body.max_new_tokens, body.temperature, body.top_p),
+        args=(
+            job_id,
+            msgs,
+            body.max_new_tokens,
+            body.temperature,
+            body.top_p,
+            session_id,
+            user_id,
+        ),
         daemon=True,
         name=f"job-{job_id[:8]}",
     )
