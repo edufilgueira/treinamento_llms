@@ -28,6 +28,16 @@
   let editingSessionId = null;
   let savingSessionRename = false;
 
+  const SESSION_LIST_LABEL_MAX = 30;
+
+  function formatSessionListLabel(title) {
+    const raw = String(title == null || String(title).trim() === "" ? "Conversa" : title).trim();
+    if (raw.length <= SESSION_LIST_LABEL_MAX) {
+      return raw;
+    }
+    return raw.slice(0, SESSION_LIST_LABEL_MAX) + "...";
+  }
+
   /** AbortController do pedido (polling) atual; Parar = abort. */
   let streamAborter = null;
 
@@ -834,7 +844,10 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "session-list__btn";
-      btn.textContent = s.title || "Conversa";
+      const fullLabel = (s.title || "Conversa").trim() || "Conversa";
+      btn.setAttribute("title", fullLabel);
+      btn.setAttribute("aria-label", fullLabel);
+      btn.textContent = fullLabel;
       const menu = document.createElement("div");
       menu.className = "session-list__menu";
       const kebab = document.createElement("button");

@@ -125,19 +125,20 @@ body.menu-open {
 
 .session-list__row {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   min-width: 0;
   width: 100%;
 }
 
-/* Bloco único: título + ⋯; o realce da sessão activa aplica-se aqui, não no botão do título. */
+/* Bloco único: título full-width; ⋯ em posição absoluta. Sem hover, texto usa o espaço do ⋯. */
 .session-list__entry {
+  --session-kebab-reserve: 0px;
+  position: relative;
   display: flex;
   align-items: center;
   min-width: 0;
   flex: 1;
   width: 100%;
-  gap: 0.15rem;
   padding: 0.1rem 0.25rem 0.1rem 0.4rem;
   border-radius: 0.5rem;
   background: transparent;
@@ -145,8 +146,15 @@ body.menu-open {
   box-sizing: border-box;
 }
 
+/* Só com rato em cima: realce. Não usar :focus-within no item — o clique no título focava o btn e deixava os ⋯ “presos”. */
 .session-list__item:hover .session-list__entry {
+  --session-kebab-reserve: 1.7rem;
   background: var(--surface-hover, rgba(255, 255, 255, 0.05));
+}
+
+.session-list__item:has(.session-list__menu.is-open) .session-list__entry,
+.session-list__item:has(.session-list__kebab:focus-visible) .session-list__entry {
+  --session-kebab-reserve: 1.7rem;
 }
 
 .session-list__item--active .session-list__entry {
@@ -158,26 +166,28 @@ body.menu-open {
 }
 
 .session-list__btn {
-  display: -webkit-box;
+  display: block;
   flex: 1;
   min-width: 0;
+  width: 100%;
   text-align: left;
   border: none;
   border-radius: 0;
   background: transparent;
   color: var(--text, #ececec);
   font-size: 0.8rem;
-  line-height: 1.3;
-  padding: 0.4rem 0.15rem 0.4rem 0.15rem;
+  line-height: 1.25;
+  padding: 0.4rem 0.1rem 0.4rem 0.1rem;
+  padding-right: calc(0.12rem + var(--session-kebab-reserve, 0px));
   margin: 0;
   cursor: pointer;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  white-space: normal;
+  white-space: nowrap;
   font-family: inherit;
+  box-sizing: border-box;
+  transition: padding-right 0.16s ease;
 }
 
 .session-list__title-input {
@@ -192,10 +202,14 @@ body.menu-open {
   background: rgba(0, 0, 0, 0.3);
   color: var(--text, #ececec);
   font-size: 0.8rem;
-  line-height: 1.3;
+  line-height: 1.25;
   padding: 0.4rem 0.5rem;
   font-family: inherit;
   outline: none;
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
 .session-list__title-input:focus {
@@ -209,13 +223,22 @@ body.menu-open {
 }
 
 .session-list__menu {
-  position: relative;
-  flex: 0 0 auto;
-  align-self: center;
+  position: absolute;
+  right: 0.1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  margin-left: 0.05rem;
+  justify-content: center;
+  margin: 0;
+  pointer-events: none;
+}
+
+.session-list__item:hover .session-list__menu,
+.session-list__menu.is-open,
+.session-list__item:has(.session-list__kebab:focus-visible) .session-list__menu {
+  pointer-events: auto;
 }
 
 /* ⋯ alinhado à direita do bloco, sem “caixa” no hover: só o símbolo ganha leve realce. */
@@ -241,8 +264,8 @@ body.menu-open {
 }
 
 .session-list__item:hover .session-list__kebab,
-.session-list__item:focus-within .session-list__kebab,
-.session-list__menu.is-open .session-list__kebab {
+.session-list__menu.is-open .session-list__kebab,
+.session-list__item:has(.session-list__kebab:focus-visible) .session-list__kebab {
   opacity: 1;
   pointer-events: auto;
 }
@@ -255,12 +278,21 @@ body.menu-open {
   box-shadow: none;
 }
 
-/* Telemóvel / sem :hover: indicar ligeiramente o controlo (toque) */
+/* Telemóvel: slot fixo para os ⋯ e menu clicável. */
 @media (hover: none) {
+  .session-list__entry {
+    --session-kebab-reserve: 1.7rem;
+  }
+
+  .session-list__menu {
+    pointer-events: auto;
+  }
+
   .session-list__kebab {
     opacity: 0.35;
     pointer-events: auto;
   }
+
   .session-list__item:active .session-list__kebab,
   .session-list__menu.is-open .session-list__kebab {
     opacity: 1;
