@@ -52,7 +52,15 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Stre
 from pydantic import BaseModel, Field, field_validator
 from starlette.middleware.sessions import SessionMiddleware
 
-from auth_db import create_user, init_db, verify_user
+from auth_db import (
+    create_user,
+    get_user_model_settings,
+    get_user_names,
+    init_db,
+    set_user_display_name,
+    set_user_model_settings,
+    verify_user,
+)
 from chat_sessions_db import (
     DEFAULT_SESSION_TITLE,
     append_turn,
@@ -61,6 +69,7 @@ from chat_sessions_db import (
     get_session_messages,
     init_chat_tables,
     list_sessions,
+    plain_for_storage,
     set_session_title_from_model,
     set_session_title_user,
     should_generate_title,
@@ -259,6 +268,24 @@ class SessionTitleUpdate(BaseModel):
     title: str = Field(..., max_length=200)
 
 
+class UserProfileUpdate(BaseModel):
+    display_name: str = Field("", max_length=64)
+
+
+class UserModelSettingsIn(BaseModel):
+    system_prompt: str | None = None
+    max_new_tokens: int | None = Field(None, ge=16, le=4096)
+    temperature: float | None = Field(None, ge=0.01, le=2.0)
+    top_p: float | None = Field(None, ge=0.05, le=1.0)
+
+
+class UserModelSettingsOut(BaseModel):
+    system_prompt: str
+    max_new_tokens: int
+    temperature: float
+    top_p: float
+
+
 class AuthIn(BaseModel):
     username: str = Field(..., max_length=32)
     password: str = Field(..., max_length=128)
@@ -331,11 +358,77 @@ async def auth_me(request: Request):
     uid = request.session.get("user_id")
     if not uid:
         return {"authenticated": False}
+    names = get_user_names(int(uid))
+    uname = request.session.get("username", "")
+    if not names:
+        return {
+            "authenticated": True,
+            "user_id": int(uid),
+            "username": uname,
+            "display_name": None,
+            "name": uname,
+        }
     return {
         "authenticated": True,
         "user_id": int(uid),
-        "username": request.session.get("username", ""),
+        "username": names["username"],
+        "display_name": names.get("display_name") or None,
+        "name": names["name"],
     }
+
+
+@app.get("/api/user/profile")
+async def user_get_profile(_uid: UserIdDep):
+    n = get_user_names(int(_uid))
+    if not n:
+        raise HTTPException(status_code=404, detail="Utilizador não encontrado.")
+    return {
+        "username": n["username"],
+        "display_name": n.get("display_name") or "",
+        "name": n["name"],
+    }
+
+
+@app.patch("/api/user/profile")
+async def user_patch_profile(_uid: UserIdDep, body: UserProfileUpdate):
+    try:
+        t = set_user_display_name(int(_uid), body.display_name)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+    n = get_user_names(int(_uid)) or {"username": "", "name": t}
+    return {
+        "username": n["username"],
+        "display_name": t,
+        "name": n["name"],
+    }
+
+
+@app.get("/api/user/settings", response_model=UserModelSettingsOut)
+async def user_get_settings(_uid: UserIdDep):
+    s = get_user_model_settings(int(_uid))
+    return UserModelSettingsOut(
+        system_prompt=s["system_prompt"],
+        max_new_tokens=s["max_new_tokens"],
+        temperature=s["temperature"],
+        top_p=s["top_p"],
+    )
+
+
+@app.patch("/api/user/settings", response_model=UserModelSettingsOut)
+async def user_patch_settings(_uid: UserIdDep, body: UserModelSettingsIn):
+    s = set_user_model_settings(
+        int(_uid),
+        system_prompt=body.system_prompt,
+        max_new_tokens=body.max_new_tokens,
+        temperature=body.temperature,
+        top_p=body.top_p,
+    )
+    return UserModelSettingsOut(
+        system_prompt=s["system_prompt"],
+        max_new_tokens=s["max_new_tokens"],
+        temperature=s["temperature"],
+        top_p=s["top_p"],
+    )
 
 
 def _clean_title_text(raw: str) -> str:
@@ -520,9 +613,11 @@ def _job_worker(
                     last_u = str(m.get("content", ""))
                     break
             if last_u and append_turn(int(user_id), int(session_id), last_u, asst_text):
+                u_pl = plain_for_storage(last_u)
+                a_pl = plain_for_storage(asst_text)
                 threading.Thread(
                     target=_title_after_turn,
-                    args=(int(user_id), int(session_id), last_u, asst_text),
+                    args=(int(user_id), int(session_id), u_pl, a_pl),
                     daemon=True,
                 ).start()
     except Exception as err:  # noqa: BLE001
@@ -736,10 +831,18 @@ async def create_chat_job(_uid: UserIdDep, body: ChatJobIn):
     if body.session_id is not None:
         if get_session_messages(int(_uid), body.session_id) is None:
             raise HTTPException(status_code=404, detail="Sessão não encontrada.")
-    msgs = [{"role": m.role, "content": m.content} for m in body.messages]
-    for m in msgs:
+    base = [{"role": m.role, "content": m.content} for m in body.messages]
+    for m in base:
         if m["role"] not in ("user", "assistant", "system"):
             raise HTTPException(status_code=400, detail="role inválido.")
+    prefs = get_user_model_settings(int(_uid))
+    no_client_system = [m for m in base if m.get("role") != "system"]
+    sp = (prefs.get("system_prompt") or "").strip()
+    if sp:
+        msgs = [{"role": "system", "content": sp}, *no_client_system]
+    else:
+        msgs = no_client_system
+    mnt, temp, tp = int(prefs["max_new_tokens"]), float(prefs["temperature"]), float(prefs["top_p"])
     _prune_completed_jobs_if_needed()
     job_id = secrets.token_urlsafe(16)
     cancel_event = threading.Event()
@@ -757,9 +860,9 @@ async def create_chat_job(_uid: UserIdDep, body: ChatJobIn):
         args=(
             job_id,
             msgs,
-            body.max_new_tokens,
-            body.temperature,
-            body.top_p,
+            mnt,
+            temp,
+            tp,
             session_id,
             user_id,
         ),

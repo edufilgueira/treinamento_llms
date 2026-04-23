@@ -129,6 +129,53 @@
     return fetch(apiUrl(path), o);
   }
 
+  if (typeof marked !== "undefined" && typeof marked.setOptions === "function") {
+    marked.setOptions({ gfm: true, breaks: true, mangle: false, headerIds: false });
+  }
+
+  function getMsgCopyText(textEl) {
+    const d = textEl.getAttribute("data-raw-md");
+    if (d != null) {
+      return d;
+    }
+    return textEl.textContent || "";
+  }
+
+  let dompurifyLinksHooked = false;
+
+  function renderMsgMarkdown(textEl, raw) {
+    textEl.classList.add("msg__text--md");
+    const md = raw == null ? "" : String(raw);
+    textEl.setAttribute("data-raw-md", md);
+    if (md.length === 0) {
+      textEl.innerHTML = "";
+      return;
+    }
+    if (typeof marked === "undefined" || typeof marked.parse !== "function") {
+      textEl.textContent = md;
+      return;
+    }
+    if (typeof DOMPurify === "undefined" || typeof DOMPurify.sanitize !== "function") {
+      textEl.textContent = md;
+      return;
+    }
+    if (!dompurifyLinksHooked && typeof DOMPurify.addHook === "function") {
+      dompurifyLinksHooked = true;
+      DOMPurify.addHook("afterSanitizeAttributes", function (node) {
+        if (node.tagName === "A" && node.hasAttribute("href")) {
+          node.setAttribute("target", "_blank");
+          node.setAttribute("rel", "noopener noreferrer");
+        }
+      });
+    }
+    try {
+      const html = marked.parse(md);
+      textEl.innerHTML = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+    } catch (_e) {
+      textEl.textContent = md;
+    }
+  }
+
   const MAX_INPUT_HEIGHT = 320;
   const SWIPE_CLOSE_PX = 72;
   const MEDIA_MOBILE = window.matchMedia("(max-width: 768px)");
@@ -278,6 +325,206 @@
 
   menuToggle.addEventListener("click", toggleMobileMenu);
 
+  const accountMenuDesk = document.getElementById("account-menu-desk");
+  const accountTriggerDesk = document.getElementById("account-trigger-desk");
+  const accountDdDesk = document.getElementById("account-dd-desk");
+  const modalBackdrop = document.getElementById("modal-backdrop");
+  const modalProfile = document.getElementById("modal-profile");
+  const modalSettings = document.getElementById("modal-settings");
+  const profileDisplayInput = document.getElementById("profile-display-input");
+  const profileLoginLine = document.getElementById("profile-login-line");
+  const settingsSystemPrompt = document.getElementById("settings-system-prompt");
+  const settingsMaxTokens = document.getElementById("settings-max-tokens");
+  const settingsTemp = document.getElementById("settings-temp");
+  const settingsTopP = document.getElementById("settings-top-p");
+
+  function setUserNameLabels(name, username) {
+    const t = (name != null && name !== "" ? name : null) || username || "";
+    const u = username || t;
+    const desk = document.getElementById("user-name-desk");
+    const menu = document.getElementById("user-name-menu");
+    if (desk) {
+      desk.textContent = t;
+      desk.setAttribute("title", u);
+    }
+    if (menu) {
+      menu.textContent = t;
+      menu.setAttribute("title", u);
+    }
+  }
+
+  function closeAccountDropdownDesk() {
+    if (!accountDdDesk || !accountTriggerDesk) return;
+    accountDdDesk.hidden = true;
+    accountTriggerDesk.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleAccountDropdownDesk() {
+    if (!accountDdDesk || !accountTriggerDesk) return;
+    const open = accountDdDesk.hidden;
+    accountDdDesk.hidden = !open;
+    accountTriggerDesk.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  if (accountTriggerDesk) {
+    accountTriggerDesk.addEventListener("click", function (e) {
+      e.stopPropagation();
+      toggleAccountDropdownDesk();
+    });
+  }
+  document.addEventListener("click", function (e) {
+    if (accountMenuDesk && !accountMenuDesk.contains(e.target)) {
+      closeAccountDropdownDesk();
+    }
+  });
+
+  function showModalPair(show) {
+    if (modalBackdrop) {
+      modalBackdrop.hidden = !show;
+    }
+  }
+
+  function closeAllModals() {
+    if (modalProfile) {
+      modalProfile.hidden = true;
+    }
+    if (modalSettings) {
+      modalSettings.hidden = true;
+    }
+    showModalPair(false);
+  }
+
+  async function openProfileModal() {
+    closeAccountDropdownDesk();
+    if (MEDIA_MOBILE.matches && mobileMenu.classList.contains("is-open")) {
+      closeMobileMenu();
+    }
+    try {
+      const r = await apiFetch("/api/user/profile", { method: "GET" });
+      if (r.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+      if (!r.ok) return;
+      const j = await r.json();
+      if (profileDisplayInput) {
+        profileDisplayInput.value = j.display_name != null ? j.display_name : "";
+      }
+      if (profileLoginLine) {
+        profileLoginLine.textContent = "Utilizador de registo: " + (j.username || "");
+      }
+    } catch (_) {}
+    if (modalProfile) {
+      modalProfile.hidden = false;
+    }
+    showModalPair(true);
+  }
+
+  async function openSettingsModal() {
+    closeAccountDropdownDesk();
+    if (MEDIA_MOBILE.matches && mobileMenu.classList.contains("is-open")) {
+      closeMobileMenu();
+    }
+    try {
+      const r = await apiFetch("/api/user/settings", { method: "GET" });
+      if (r.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+      if (!r.ok) return;
+      const j = await r.json();
+      if (settingsSystemPrompt) {
+        settingsSystemPrompt.value = j.system_prompt != null ? j.system_prompt : "";
+      }
+      if (settingsMaxTokens) {
+        settingsMaxTokens.value = String(j.max_new_tokens);
+      }
+      if (settingsTemp) {
+        settingsTemp.value = String(j.temperature);
+      }
+      if (settingsTopP) {
+        settingsTopP.value = String(j.top_p);
+      }
+    } catch (_) {}
+    if (modalSettings) {
+      modalSettings.hidden = false;
+    }
+    showModalPair(true);
+  }
+
+  document.getElementById("open-profile-desk")?.addEventListener("click", function () {
+    void openProfileModal();
+  });
+  document.getElementById("open-profile-m")?.addEventListener("click", function () {
+    void openProfileModal();
+  });
+  document.getElementById("open-settings-desk")?.addEventListener("click", function () {
+    void openSettingsModal();
+  });
+  document.getElementById("open-settings-m")?.addEventListener("click", function () {
+    void openSettingsModal();
+  });
+  document.getElementById("modal-profile-close")?.addEventListener("click", closeAllModals);
+  document.getElementById("profile-cancel")?.addEventListener("click", closeAllModals);
+  document.getElementById("modal-settings-close")?.addEventListener("click", closeAllModals);
+  document.getElementById("settings-cancel")?.addEventListener("click", closeAllModals);
+  if (modalBackdrop) {
+    modalBackdrop.addEventListener("click", closeAllModals);
+  }
+
+  document.getElementById("profile-save")?.addEventListener("click", async function () {
+    const v = profileDisplayInput ? profileDisplayInput.value : "";
+    try {
+      const r = await apiFetch("/api/user/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ display_name: v }),
+      });
+      if (r.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+      if (r.ok) {
+        const j = await r.json();
+        setUserNameLabels(j.name, j.username);
+        closeAllModals();
+        await loadSessionUser();
+      }
+    } catch (_) {}
+  });
+
+  document.getElementById("settings-save")?.addEventListener("click", async function () {
+    const body = {
+      system_prompt: settingsSystemPrompt ? settingsSystemPrompt.value : "",
+      max_new_tokens: settingsMaxTokens ? parseInt(String(settingsMaxTokens.value), 10) : 2048,
+      temperature: settingsTemp ? parseFloat(String(settingsTemp.value)) : 0.7,
+      top_p: settingsTopP ? parseFloat(String(settingsTopP.value)) : 0.9,
+    };
+    if (isNaN(body.max_new_tokens)) {
+      body.max_new_tokens = 2048;
+    }
+    if (isNaN(body.temperature)) {
+      body.temperature = 0.7;
+    }
+    if (isNaN(body.top_p)) {
+      body.top_p = 0.9;
+    }
+    try {
+      const r = await apiFetch("/api/user/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (r.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+      if (r.ok) {
+        closeAllModals();
+      }
+    } catch (_) {}
+  });
+
   async function refreshStatus() {
     try {
       const r = await apiFetch("/api/status");
@@ -306,17 +553,8 @@
         return;
       }
       const j = await r.json();
-      if (j && j.authenticated && j.username) {
-        const desk = document.getElementById("user-name-desk");
-        const menu = document.getElementById("user-name-menu");
-        if (desk) {
-          desk.textContent = j.username;
-          desk.setAttribute("title", j.username);
-        }
-        if (menu) {
-          menu.textContent = j.username;
-          menu.setAttribute("title", j.username);
-        }
+      if (j && j.authenticated) {
+        setUserNameLabels(j.name, j.username);
       }
     } catch (_) {}
   }
@@ -446,11 +684,11 @@
       "msg-stack " + (role === "assistant" ? "msg-stack--assistant" : "msg-stack--user");
     const bubble = document.createElement("div");
     bubble.className = "msg " + role;
-    const textEl = document.createElement("span");
+    const textEl = document.createElement("div");
     textEl.className = "msg__text";
-    textEl.textContent = content;
+    renderMsgMarkdown(textEl, content);
     const copyBtn = document.createElement("button");
-    bindCopyButton(copyBtn, () => textEl.textContent, stack);
+    bindCopyButton(copyBtn, () => getMsgCopyText(textEl), stack);
     bubble.appendChild(textEl);
     stack.appendChild(bubble);
     stack.appendChild(copyBtn);
@@ -464,10 +702,10 @@
     stack.className = "msg-stack msg-stack--assistant";
     const bubble = document.createElement("div");
     bubble.className = "msg assistant streaming";
-    const textEl = document.createElement("span");
+    const textEl = document.createElement("div");
     textEl.className = "msg__text";
     const copyBtn = document.createElement("button");
-    bindCopyButton(copyBtn, () => textEl.textContent, stack);
+    bindCopyButton(copyBtn, () => getMsgCopyText(textEl), stack);
     bubble.appendChild(textEl);
     stack.appendChild(bubble);
     stack.appendChild(copyBtn);
@@ -937,7 +1175,7 @@
         }
         const st = await stRes.json();
         lastText = st.text != null ? String(st.text) : "";
-        textEl.textContent = lastText;
+        renderMsgMarkdown(textEl, lastText);
         scrollLogIfFollowing();
         if (st.status === "done") {
           endReason = "done";
@@ -963,6 +1201,8 @@
         }
       } else {
         endReason = "error";
+        textEl.classList.remove("msg__text--md");
+        textEl.removeAttribute("data-raw-md");
         textEl.textContent = "Erro: " + e.message;
       }
     } finally {
@@ -970,6 +1210,7 @@
         history.push({ role: "assistant", content: lastText });
       } else if (endReason === "cancelled" || endReason === "abort") {
         if (lastText.trim().length) {
+          renderMsgMarkdown(textEl, lastText);
           history.push({ role: "assistant", content: lastText });
         } else {
           const stack = assistantDiv.closest && assistantDiv.closest(".msg-stack");
@@ -1008,7 +1249,12 @@
   });
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && mobileMenu.classList.contains("is-open")) {
+    if (e.key !== "Escape") return;
+    if (modalBackdrop && !modalBackdrop.hidden) {
+      closeAllModals();
+      return;
+    }
+    if (mobileMenu.classList.contains("is-open")) {
       closeMobileMenu();
     }
   });

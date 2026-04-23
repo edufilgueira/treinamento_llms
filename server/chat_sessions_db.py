@@ -15,6 +15,35 @@ _PATH = Path(__file__).resolve().parent / "data" / "oraculo_users.db"
 DEFAULT_SESSION_TITLE = "Novo chat"
 
 
+def plain_for_storage(s: str) -> str:
+    """
+    Reduz Markdown a texto plano (ex.: geração de título a partir de excertos).
+    O conteúdo das mensagens em `append_turn` guarda-se na íntegra.
+    """
+    if not s or not s.strip():
+        return (s or "").strip()
+
+    t = str(s)
+    t = re.sub(r"```[\w-]*\n?([\s\S]*?)```", r"\1", t)
+    t = re.sub(r"~~(.+?)~~", r"\1", t)
+    t = re.sub(r"`([^`]+)`", r"\1", t)
+    t = re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", r"\1", t)
+    t = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1", t)
+    for _ in range(8):
+        prev = t
+        t = re.sub(r"\*\*([^*]+)\*\*", r"\1", t)
+        t = re.sub(r"__([^_]+)__", r"\1", t)
+        if t == prev:
+            break
+    t = re.sub(r"(?m)^\s*#{1,6}\s+", "", t)
+    t = re.sub(r"(?m)^\s*>\s?", "", t)
+    t = re.sub(r"(?m)^\s*(?:\d+)[.)]\s+", "", t)
+    t = re.sub(r"(?m)^\s*[-*+]\s+", "", t)
+    t = re.sub(r"(?m)^\s*(?:-{3,}|\*{3,}|_{3,})\s*$", "", t)
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t.strip()
+
+
 def _connect() -> sqlite3.Connection:
     return sqlite3.connect(_PATH, timeout=30.0)
 

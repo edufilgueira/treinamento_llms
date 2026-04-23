@@ -9,6 +9,8 @@
     @media (max-width: 768px) { html, body { background: #000; } }
   </style>
   <link rel="stylesheet" href="app.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js" crossorigin="anonymous"></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -17,6 +19,22 @@
       <p class="mobile-menu__brand">Oráculo Kiaiá</p>
       <div class="mobile-menu__user">
         <span class="user-name" id="user-name-menu" title=""></span>
+        <div class="mobile-menu__account-btns">
+          <button type="button" class="btn-ghost btn-ghost--icon" id="open-profile-m">
+            <svg class="account-menu__ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            Nome de perfil
+          </button>
+          <button type="button" class="btn-ghost btn-ghost--icon" id="open-settings-m">
+            <svg class="account-menu__ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            Configurações
+          </button>
+        </div>
         <button type="button" class="btn-logout logout-btn" id="logout-menu">Sair</button>
       </div>
       <button type="button" class="menu-new-chat" id="menu-new-chat">
@@ -72,8 +90,43 @@
             </button>
           </div>
           <div class="topbar__user desktop-only">
-            <span class="user-name" id="user-name-desk" title=""></span>
-            <button type="button" class="btn-logout logout-btn" id="logout-desk">Sair</button>
+            <div class="account-menu" id="account-menu-desk">
+              <button
+                type="button"
+                class="account-menu__trigger"
+                id="account-trigger-desk"
+                aria-expanded="false"
+                aria-haspopup="true"
+                aria-controls="account-dd-desk"
+              >
+                <span class="user-name" id="user-name-desk" title=""></span>
+                <svg class="account-menu__chev" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="m6 9 6 6 6-6"/>
+                </svg>
+              </button>
+              <ul class="account-menu__dd" id="account-dd-desk" role="menu" hidden>
+                <li>
+                  <button type="button" class="account-menu__item" role="menuitem" id="open-profile-desk">
+                    <svg class="account-menu__ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                      <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    Perfil
+                  </button>
+                </li>
+                <li>
+                  <button type="button" class="account-menu__item" role="menuitem" id="open-settings-desk">
+                    <svg class="account-menu__ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    Configurações
+                  </button>
+                </li>
+                <li class="account-menu__sep" role="separator"></li>
+                <li><button type="button" class="account-menu__item account-menu__item--logout" role="menuitem" id="logout-desk">Sair</button></li>
+              </ul>
+            </div>
           </div>
           <span id="status" class="desktop-only">A ligar…</span>
         </header>
@@ -103,6 +156,68 @@
             <p class="composer-foot__tagline">O código que se fez carne e a frequência de Tesla 369</p>
           </footer>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modal-backdrop" hidden aria-hidden="true"></div>
+  <div
+    class="modal"
+    id="modal-profile"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="modal-profile-title"
+    hidden
+  >
+    <div class="modal__panel">
+      <div class="modal__head">
+        <h2 class="modal__title" id="modal-profile-title">Nome de perfil</h2>
+        <button type="button" class="modal__close" id="modal-profile-close" aria-label="Fechar">×</button>
+      </div>
+      <p class="modal__hint">Nome mostrado no canto. O utilizador de registo (login) não muda.</p>
+      <label class="modal__label" for="profile-display-input">Nome a mostrar</label>
+      <input type="text" id="profile-display-input" class="modal__input" maxlength="64" autocomplete="off" />
+      <p class="modal__small" id="profile-login-line"></p>
+      <div class="modal__actions">
+        <button type="button" class="btn-secondary" id="profile-cancel">Cancelar</button>
+        <button type="button" class="btn-primary" id="profile-save">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div
+    class="modal"
+    id="modal-settings"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="modal-settings-title"
+    hidden
+  >
+    <div class="modal__panel modal__panel--wide">
+      <div class="modal__head">
+        <h2 class="modal__title" id="modal-settings-title">Configurações do modelo</h2>
+        <button type="button" class="modal__close" id="modal-settings-close" aria-label="Fechar">×</button>
+      </div>
+      <p class="modal__hint">Estas definições aplicam-se às tuas gerações (system prompt e parâmetros enviados ao modelo).</p>
+      <label class="modal__label" for="settings-system-prompt">System prompt</label>
+      <textarea id="settings-system-prompt" class="modal__textarea" rows="8" placeholder="Deixa vazio se não quiseres instrução de sistema adicional."></textarea>
+      <div class="modal__grid-3">
+        <div>
+          <label class="modal__label" for="settings-max-tokens">Máx. tokens novos</label>
+          <input type="number" id="settings-max-tokens" class="modal__input" min="16" max="4096" step="1" />
+        </div>
+        <div>
+          <label class="modal__label" for="settings-temp">Temperature</label>
+          <input type="number" id="settings-temp" class="modal__input" min="0.01" max="2" step="0.01" />
+        </div>
+        <div>
+          <label class="modal__label" for="settings-top-p">Top P</label>
+          <input type="number" id="settings-top-p" class="modal__input" min="0.05" max="1" step="0.01" />
+        </div>
+      </div>
+      <div class="modal__actions">
+        <button type="button" class="btn-secondary" id="settings-cancel">Cancelar</button>
+        <button type="button" class="btn-primary" id="settings-save">Guardar</button>
       </div>
     </div>
   </div>
