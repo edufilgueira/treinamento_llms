@@ -1,0 +1,15 @@
+ssh root@187.77.44.167
+
+
+scp lora_adapter.zip  root@187.77.44.167:/root/treinamento_llms/outputs
+
+
+segundo plano
+nohup ./serve.sh > app.log 2>&1 &
+
+
+ps aux | grep python
+
+
+
+2.57.91.91
