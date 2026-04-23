@@ -62,6 +62,7 @@ from chat_sessions_db import (
     init_chat_tables,
     list_sessions,
     set_session_title_from_model,
+    set_session_title_user,
     should_generate_title,
 )
 
@@ -252,6 +253,10 @@ class JobStateOut(BaseModel):
     status: str
     text: str
     error: str | None = None
+
+
+class SessionTitleUpdate(BaseModel):
+    title: str = Field(..., max_length=200)
 
 
 class AuthIn(BaseModel):
@@ -699,6 +704,18 @@ async def api_get_session(_uid: UserIdDep, session_id: int):
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
     messages, title = out
     return {"id": session_id, "title": title, "messages": messages}
+
+
+@app.patch("/api/sessions/{session_id}")
+async def api_rename_session(
+    _uid: UserIdDep, session_id: int, body: SessionTitleUpdate
+):
+    t = (body.title or "").strip()
+    if not t:
+        raise HTTPException(status_code=400, detail="Título vazio.")
+    if not set_session_title_user(int(_uid), session_id, t):
+        raise HTTPException(status_code=404, detail="Sessão não encontrada.")
+    return {"id": session_id, "title": t[:200]}
 
 
 @app.delete("/api/sessions/{session_id}")

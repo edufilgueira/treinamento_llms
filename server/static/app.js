@@ -24,6 +24,9 @@
   const history = [];
   let currentSessionId = null;
   let lastSessions = [];
+  /** Sessão cujo título está a ser editado na barra (null = nenhum). */
+  let editingSessionId = null;
+  let savingSessionRename = false;
 
   /** AbortController do pedido (polling) atual; Parar = abort. */
   let streamAborter = null;
@@ -487,18 +490,158 @@
     inputEl.focus();
   }
 
+  function closeAllSessionMenus() {
+    document.querySelectorAll(".session-list__menu.is-open").forEach(function (m) {
+      m.classList.remove("is-open");
+    });
+  }
+
   function buildSessionItem(s) {
     const li = document.createElement("li");
     li.className =
       "session-list__item" +
       (String(s.id) === String(currentSessionId) ? " session-list__item--active" : "");
     li.dataset.sid = String(s.id);
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "session-list__btn";
-    btn.textContent = s.title || "Conversa";
-    li.appendChild(btn);
+    const row = document.createElement("div");
+    row.className = "session-list__row";
+    const isEditing = editingSessionId != null && String(editingSessionId) === String(s.id);
+
+    if (isEditing) {
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.className = "session-list__title-input";
+      inp.value = s.title || "Conversa";
+      inp.setAttribute("aria-label", "Nome da conversa");
+      inp.setAttribute("autocomplete", "off");
+      row.appendChild(inp);
+    } else {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "session-list__btn";
+      btn.textContent = s.title || "Conversa";
+      row.appendChild(btn);
+
+      const menu = document.createElement("div");
+      menu.className = "session-list__menu";
+      const kebab = document.createElement("button");
+      kebab.type = "button";
+      kebab.className = "session-list__kebab";
+      kebab.setAttribute("aria-label", "Mais opções");
+      kebab.setAttribute("aria-haspopup", "true");
+      kebab.setAttribute("aria-expanded", "false");
+      kebab.appendChild(document.createTextNode("⋯"));
+      const dd = document.createElement("div");
+      dd.className = "session-list__dropdown";
+      dd.setAttribute("role", "menu");
+      const renameBtn = document.createElement("button");
+      renameBtn.type = "button";
+      renameBtn.className = "session-list__dd-item";
+      renameBtn.setAttribute("role", "menuitem");
+      renameBtn.dataset.action = "rename";
+      renameBtn.textContent = "Renomear";
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "session-list__dd-item session-list__dd-item--icononly";
+      removeBtn.setAttribute("role", "menuitem");
+      removeBtn.setAttribute("aria-label", "Remover");
+      removeBtn.dataset.action = "remove";
+      removeBtn.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
+      dd.appendChild(renameBtn);
+      dd.appendChild(removeBtn);
+      menu.appendChild(kebab);
+      menu.appendChild(dd);
+      row.appendChild(menu);
+    }
+
+    li.appendChild(row);
     return li;
+  }
+
+  function startSessionRename(sid) {
+    closeAllSessionMenus();
+    editingSessionId = String(sid);
+    renderSessionList();
+    requestAnimationFrame(function () {
+      const root = MEDIA_MOBILE.matches ? sessionListMenuEl : sessionListEl;
+      const inp =
+        (root && root.querySelector(".session-list__title-input")) ||
+        document.querySelector(".session-list__title-input");
+      if (inp) {
+        inp.focus();
+        inp.select();
+      }
+    });
+  }
+
+  async function commitSessionRename(sid, rawValue) {
+    if (savingSessionRename) return;
+    const sidStr = String(sid);
+    if (editingSessionId == null || String(editingSessionId) !== sidStr) {
+      return;
+    }
+    const trimmed = (rawValue || "").trim();
+    const prev = (lastSessions.find(function (x) { return String(x.id) === sidStr; }) || {})
+      .title;
+    if (trimmed === (prev || "") || !trimmed) {
+      editingSessionId = null;
+      renderSessionList();
+      return;
+    }
+    savingSessionRename = true;
+    editingSessionId = null;
+    renderSessionList();
+    try {
+      const r = await apiFetch("/api/sessions/" + encodeURIComponent(sid), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: trimmed }),
+      });
+      if (r.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+      if (r.ok) {
+        const j = await r.json();
+        for (let i = 0; i < lastSessions.length; i++) {
+          if (String(lastSessions[i].id) === sidStr) {
+            lastSessions[i].title = j.title;
+            break;
+          }
+        }
+        renderSessionList();
+        return;
+      }
+      editingSessionId = sidStr;
+      renderSessionList();
+      requestAnimationFrame(function () {
+        const root = MEDIA_MOBILE.matches ? sessionListMenuEl : sessionListEl;
+        const inp =
+          (root && root.querySelector('.session-list__item[data-sid="' + sidStr + '"] .session-list__title-input')) ||
+          document.querySelector('.session-list__item[data-sid="' + sidStr + '"] .session-list__title-input');
+        if (inp) {
+          inp.value = trimmed;
+          inp.focus();
+          inp.select();
+        }
+      });
+    } catch (_) {
+      editingSessionId = sidStr;
+      renderSessionList();
+      requestAnimationFrame(function () {
+        const root = MEDIA_MOBILE.matches ? sessionListMenuEl : sessionListEl;
+        const inp =
+          (root && root.querySelector('.session-list__item[data-sid="' + sidStr + '"] .session-list__title-input')) ||
+          document.querySelector('.session-list__item[data-sid="' + sidStr + '"] .session-list__title-input');
+        if (inp) {
+          inp.value = trimmed;
+          inp.focus();
+          inp.select();
+        }
+      });
+    } finally {
+      savingSessionRename = false;
+    }
   }
 
   function renderSessionList() {
@@ -556,6 +699,39 @@
   }
 
   function onSessionListClick(e) {
+    if (e.target.closest(".session-list__title-input")) {
+      e.stopPropagation();
+      return;
+    }
+    if (e.target.closest(".session-list__kebab")) {
+      e.stopPropagation();
+      e.preventDefault();
+      const menu = e.target.closest(".session-list__menu");
+      if (menu) {
+        menu.classList.toggle("is-open");
+      }
+      return;
+    }
+    const act = e.target.closest("[data-action]");
+    if (act) {
+      e.stopPropagation();
+      e.preventDefault();
+      if (act.dataset.action === "remove") {
+        closeAllSessionMenus();
+        return;
+      }
+      if (act.dataset.action === "rename") {
+        const li = act.closest("li");
+        if (li && li.dataset.sid != null) {
+          startSessionRename(li.dataset.sid);
+        }
+      }
+      return;
+    }
+    if (e.target.closest(".session-list__menu")) {
+      e.stopPropagation();
+      return;
+    }
     const btn = e.target.closest(".session-list__btn");
     if (!btn) return;
     const li = btn.closest("li");
@@ -567,6 +743,52 @@
   }
   if (sessionListMenuEl) {
     sessionListMenuEl.addEventListener("click", onSessionListClick);
+  }
+
+  function onGlobalCloseSessionMenu(e) {
+    if (e && e.target && e.target.closest && e.target.closest(".session-list__menu")) {
+      return;
+    }
+    closeAllSessionMenus();
+  }
+  document.addEventListener("click", onGlobalCloseSessionMenu);
+
+  function onSessionListFocusOut(e) {
+    const t = e.target;
+    if (!t || !t.classList || !t.classList.contains("session-list__title-input")) {
+      return;
+    }
+    const li = t.closest("li");
+    if (!li || li.dataset.sid == null) return;
+    void commitSessionRename(li.dataset.sid, t.value);
+  }
+  if (sessionListEl) {
+    sessionListEl.addEventListener("focusout", onSessionListFocusOut);
+  }
+  if (sessionListMenuEl) {
+    sessionListMenuEl.addEventListener("focusout", onSessionListFocusOut);
+  }
+
+  function onSessionListKeydown(e) {
+    if (!e.target.classList.contains("session-list__title-input")) {
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.target.blur();
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      editingSessionId = null;
+      renderSessionList();
+    }
+  }
+  if (sessionListEl) {
+    sessionListEl.addEventListener("keydown", onSessionListKeydown, true);
+  }
+  if (sessionListMenuEl) {
+    sessionListMenuEl.addEventListener("keydown", onSessionListKeydown, true);
   }
 
   async function ensureSession() {

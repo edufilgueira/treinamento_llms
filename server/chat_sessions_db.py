@@ -186,6 +186,30 @@ def append_turn(
     return True
 
 
+def set_session_title_user(user_id: int, session_id: int, title: str) -> bool:
+    """Atualiza o título a pedido do utilizador (renomear na UI)."""
+    t = re.sub(r"\s+", " ", (title or "").strip())[:200]
+    if not t:
+        return False
+    if not _owns(user_id, session_id):
+        return False
+    with _db_lock:
+        con = _connect()
+        try:
+            cur = con.execute(
+                """
+                UPDATE chat_sessions
+                SET title = ?, title_done = 1, updated_at = datetime('now')
+                WHERE id = ? AND user_id = ?
+                """,
+                (t, session_id, user_id),
+            )
+            con.commit()
+            return cur.rowcount > 0
+        finally:
+            con.close()
+
+
 def set_session_title_from_model(user_id: int, session_id: int, title: str) -> bool:
     t = re.sub(r"\s+", " ", (title or "").strip())[:200]
     if not t:

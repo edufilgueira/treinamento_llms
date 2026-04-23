@@ -123,9 +123,18 @@ body.menu-open {
   margin: 0.1rem 0;
 }
 
+.session-list__row {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: 0;
+  width: 100%;
+}
+
 .session-list__btn {
   display: block;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   text-align: left;
   border: none;
   border-radius: 0.45rem;
@@ -152,6 +161,136 @@ body.menu-open {
 .session-list__item--active .session-list__btn {
   background: rgba(255, 255, 255, 0.1);
   font-weight: 500;
+}
+
+.session-list__title-input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0.45rem;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--text, #ececec);
+  font-size: 0.8rem;
+  line-height: 1.3;
+  padding: 0.45rem 0.5rem;
+  font-family: inherit;
+  outline: none;
+}
+
+.session-list__title-input:focus {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.session-list__item--active .session-list__title-input {
+  background: rgba(255, 255, 255, 0.1);
+  font-weight: 500;
+}
+
+.session-list__menu {
+  position: relative;
+  flex-shrink: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+
+.session-list__kebab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  min-height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--text, #ececec);
+  font-size: 0.9rem;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  opacity: 0.3;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.session-list__kebab:hover,
+.session-list__kebab:focus-visible {
+  opacity: 0.95;
+  background: var(--surface-hover, rgba(255, 255, 255, 0.06));
+  outline: none;
+}
+
+.session-list__menu:hover .session-list__kebab,
+.session-list__menu.is-open .session-list__kebab,
+.session-list__menu:focus-within .session-list__kebab {
+  opacity: 0.9;
+}
+
+.session-list__dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 30;
+  margin-top: 0.15rem;
+  min-width: 7.5rem;
+  padding: 0.2rem 0;
+  border-radius: 0.45rem;
+  background: #2c2c2c;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s;
+}
+
+.session-list__menu:hover .session-list__dropdown,
+.session-list__menu.is-open .session-list__dropdown,
+.session-list__menu:focus-within .session-list__dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.session-list__dd-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: var(--text, #ececec);
+  font-size: 0.8rem;
+  line-height: 1.2;
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.1s ease;
+}
+
+.session-list__dd-item:hover,
+.session-list__dd-item:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.session-list__dd-item--icononly {
+  justify-content: center;
+  color: var(--text-secondary, #9a9a9a);
+  padding: 0.45rem 0.5rem;
+}
+
+.session-list__dd-item--icononly:hover,
+.session-list__dd-item--icononly:focus-visible {
+  color: var(--text, #ececec);
 }
 
 .mobile-sessions {
