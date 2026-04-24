@@ -1,16 +1,16 @@
 """
-Sessões de chat por utilizador (SQLite, mesma DB que auth).
+Sessões de chat por utilizador (PostgreSQL, mesma base que auth).
 """
 
 from __future__ import annotations
 
 import re
-import sqlite3
 import threading
-from pathlib import Path
+from typing import Any
+
+from pg_db import get_connection, init_schema
 
 _db_lock = threading.Lock()
-_PATH = Path(__file__).resolve().parent / "data" / "oraculo_users.db"
 
 DEFAULT_SESSION_TITLE = "Novo chat"
 
@@ -44,123 +44,101 @@ def plain_for_storage(s: str) -> str:
     return t.strip()
 
 
-def _connect() -> sqlite3.Connection:
-    return sqlite3.connect(_PATH, timeout=30.0)
-
-
 def init_chat_tables() -> None:
+    """Garante o esquema; idempotente (já feito em auth_db.init_db; mantido para compat)."""
     with _db_lock:
-        con = _connect()
-        try:
-            con.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS chat_sessions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    title TEXT NOT NULL DEFAULT 'Novo chat',
-                    title_done INTEGER NOT NULL DEFAULT 0,
-                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-                );
-                CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_updated
-                ON chat_sessions(user_id, updated_at DESC);
-                CREATE TABLE IF NOT EXISTS chat_messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id INTEGER NOT NULL,
-                    role TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    pos INTEGER NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                    FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
-                );
-                CREATE INDEX IF NOT EXISTS idx_chat_messages_session_pos
-                ON chat_messages(session_id, pos);
-                """
-            )
-            con.commit()
-        finally:
-            con.close()
+        init_schema()
 
 
 def create_session(user_id: int) -> int:
     with _db_lock:
-        con = _connect()
+        con = get_connection()
         try:
-            cur = con.execute(
-                """
-                INSERT INTO chat_sessions (user_id, title, title_done)
-                VALUES (?, ?, 0)
-                """,
-                (user_id, DEFAULT_SESSION_TITLE),
-            )
-            con.commit()
-            return int(cur.lastrowid)
+            with con:
+                with con.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO chat_sessions (user_id, title, title_done)
+                        VALUES (%s, %s, 0)
+                        RETURNING id
+                        """,
+                        (user_id, DEFAULT_SESSION_TITLE),
+                    )
+                    row = cur.fetchone()
+                    if not row:
+                        raise RuntimeError("falha insert chat_sessions")
+                    return int(row[0])
         finally:
             con.close()
 
 
 def _owns(user_id: int, session_id: int) -> bool:
     with _db_lock:
-        con = _connect()
+        con = get_connection()
         try:
-            row = con.execute(
-                "SELECT 1 FROM chat_sessions WHERE id = ? AND user_id = ?",
-                (session_id, user_id),
-            ).fetchone()
-            return bool(row)
+            with con.cursor() as cur:
+                cur.execute(
+                    "SELECT 1 FROM chat_sessions WHERE id = %s AND user_id = %s",
+                    (session_id, user_id),
+                )
+                return cur.fetchone() is not None
         finally:
             con.close()
 
 
-def list_sessions(user_id: int, limit: int = 100) -> list[dict]:
+def list_sessions(user_id: int, limit: int = 100) -> list[dict[str, Any]]:
     with _db_lock:
-        con = _connect()
+        con = get_connection()
         try:
-            rows = con.execute(
-                """
-                SELECT id, title, created_at, updated_at
-                FROM chat_sessions
-                WHERE user_id = ?
-                ORDER BY updated_at DESC
-                LIMIT ?
-                """,
-                (user_id, limit),
-            ).fetchall()
+            with con.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, title, created_at, updated_at
+                    FROM chat_sessions
+                    WHERE user_id = %s
+                    ORDER BY updated_at DESC
+                    LIMIT %s
+                    """,
+                    (user_id, limit),
+                )
+                rows = cur.fetchall()
         finally:
             con.close()
-    return [
-        {
-            "id": r[0],
-            "title": r[1],
-            "created_at": r[2],
-            "updated_at": r[3],
-        }
-        for r in rows
-    ]
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        ca, ua = r[2], r[3]
+        out.append(
+            {
+                "id": r[0],
+                "title": r[1],
+                "created_at": ca.isoformat() if hasattr(ca, "isoformat") else str(ca or ""),
+                "updated_at": ua.isoformat() if hasattr(ua, "isoformat") else str(ua or ""),
+            }
+        )
+    return out
 
 
 def get_session_messages(user_id: int, session_id: int) -> tuple[list[dict], str] | None:
     if not _owns(user_id, session_id):
         return None
     with _db_lock:
-        con = _connect()
+        con = get_connection()
         try:
-            trow = con.execute(
-                "SELECT title FROM chat_sessions WHERE id = ?",
-                (session_id,),
-            ).fetchone()
-            if not trow:
-                return None
-            title = str(trow[0])
-            rows = con.execute(
-                """
-                SELECT role, content FROM chat_messages
-                WHERE session_id = ?
-                ORDER BY pos ASC, id ASC
-                """,
-                (session_id,),
-            ).fetchall()
+            with con.cursor() as cur:
+                cur.execute("SELECT title FROM chat_sessions WHERE id = %s", (session_id,))
+                trow = cur.fetchone()
+                if not trow:
+                    return None
+                title = str(trow[0])
+                cur.execute(
+                    """
+                    SELECT role, content FROM chat_messages
+                    WHERE session_id = %s
+                    ORDER BY pos ASC, id ASC
+                    """,
+                    (session_id,),
+                )
+                rows = cur.fetchall()
         finally:
             con.close()
     return (
@@ -173,11 +151,15 @@ def delete_session(user_id: int, session_id: int) -> bool:
     if not _owns(user_id, session_id):
         return False
     with _db_lock:
-        con = _connect()
+        con = get_connection()
         try:
-            con.execute("DELETE FROM chat_sessions WHERE id = ? AND user_id = ?", (session_id, user_id))
-            con.commit()
-            return True
+            with con:
+                with con.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM chat_sessions WHERE id = %s AND user_id = %s",
+                        (session_id, user_id),
+                    )
+                    return cur.rowcount > 0
         finally:
             con.close()
 
@@ -190,26 +172,34 @@ def append_turn(
     user_text = user_text or ""
     assistant_text = assistant_text or ""
     with _db_lock:
-        con = _connect()
+        con = get_connection()
         try:
-            row = con.execute(
-                "SELECT COALESCE(MAX(pos), -1) FROM chat_messages WHERE session_id = ?",
-                (session_id,),
-            ).fetchone()
-            base = int(row[0]) + 1
-            con.execute(
-                "INSERT INTO chat_messages (session_id, role, content, pos) VALUES (?, 'user', ?, ?)",
-                (session_id, user_text, base),
-            )
-            con.execute(
-                "INSERT INTO chat_messages (session_id, role, content, pos) VALUES (?, 'assistant', ?, ?)",
-                (session_id, assistant_text, base + 1),
-            )
-            con.execute(
-                "UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?",
-                (session_id,),
-            )
-            con.commit()
+            with con:
+                with con.cursor() as cur:
+                    cur.execute(
+                        "SELECT COALESCE(MAX(pos), -1) FROM chat_messages WHERE session_id = %s",
+                        (session_id,),
+                    )
+                    row = cur.fetchone()
+                    base = int(row[0]) + 1
+                    cur.execute(
+                        """
+                        INSERT INTO chat_messages (session_id, role, content, pos)
+                        VALUES (%s, 'user', %s, %s)
+                        """,
+                        (session_id, user_text, base),
+                    )
+                    cur.execute(
+                        """
+                        INSERT INTO chat_messages (session_id, role, content, pos)
+                        VALUES (%s, 'assistant', %s, %s)
+                        """,
+                        (session_id, assistant_text, base + 1),
+                    )
+                    cur.execute(
+                        "UPDATE chat_sessions SET updated_at = NOW() WHERE id = %s",
+                        (session_id,),
+                    )
         finally:
             con.close()
     return True
@@ -223,18 +213,19 @@ def set_session_title_user(user_id: int, session_id: int, title: str) -> bool:
     if not _owns(user_id, session_id):
         return False
     with _db_lock:
-        con = _connect()
+        con = get_connection()
         try:
-            cur = con.execute(
-                """
-                UPDATE chat_sessions
-                SET title = ?, title_done = 1, updated_at = datetime('now')
-                WHERE id = ? AND user_id = ?
-                """,
-                (t, session_id, user_id),
-            )
-            con.commit()
-            return cur.rowcount > 0
+            with con:
+                with con.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE chat_sessions
+                        SET title = %s, title_done = 1, updated_at = NOW()
+                        WHERE id = %s AND user_id = %s
+                        """,
+                        (t, session_id, user_id),
+                    )
+                    return cur.rowcount > 0
         finally:
             con.close()
 
@@ -244,18 +235,19 @@ def set_session_title_from_model(user_id: int, session_id: int, title: str) -> b
     if not t:
         return False
     with _db_lock:
-        con = _connect()
+        con = get_connection()
         try:
-            cur = con.execute(
-                """
-                UPDATE chat_sessions
-                SET title = ?, title_done = 1, updated_at = datetime('now')
-                WHERE id = ? AND user_id = ? AND title_done = 0
-                """,
-                (t, session_id, user_id),
-            )
-            con.commit()
-            return cur.rowcount > 0
+            with con:
+                with con.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE chat_sessions
+                        SET title = %s, title_done = 1, updated_at = NOW()
+                        WHERE id = %s AND user_id = %s AND title_done = 0
+                        """,
+                        (t, session_id, user_id),
+                    )
+                    return cur.rowcount > 0
         finally:
             con.close()
 
@@ -266,12 +258,14 @@ def user_owns_session(user_id: int, session_id: int) -> bool:
 
 def should_generate_title(user_id: int, session_id: int) -> bool:
     with _db_lock:
-        con = _connect()
+        con = get_connection()
         try:
-            row = con.execute(
-                "SELECT title_done, title FROM chat_sessions WHERE id = ? AND user_id = ?",
-                (session_id, user_id),
-            ).fetchone()
+            with con.cursor() as cur:
+                cur.execute(
+                    "SELECT title_done, title FROM chat_sessions WHERE id = %s AND user_id = %s",
+                    (session_id, user_id),
+                )
+                row = cur.fetchone()
         finally:
             con.close()
     if not row:

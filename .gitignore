@@ -11,3 +11,5 @@ checkpoints/
 # Auth DB and session secret (local dev; do not commit)
 server/data/oraculo_users.db
 server/data/.session_secret
+.env
+server/.env

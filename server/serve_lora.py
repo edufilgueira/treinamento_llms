@@ -35,6 +35,18 @@ if str(_PROJECT_ROOT) not in sys.path:
 if str(_SERVER_DIR) not in sys.path:
     sys.path.insert(0, str(_SERVER_DIR))
 
+
+def _load_dotenv_early() -> None:
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    load_dotenv(_PROJECT_ROOT / ".env")
+    load_dotenv(_SERVER_DIR / ".env", override=True)
+
+
+_load_dotenv_early()
+
 from data_config import (
     DEFAULT_ADAPTER_DIR,
     DEFAULT_MERGED_MODEL_DIR,
@@ -74,7 +86,6 @@ from chat_sessions_db import (
     create_session,
     delete_session,
     get_session_messages,
-    init_chat_tables,
     list_sessions,
     plain_for_storage,
     set_session_title_from_model,
@@ -183,11 +194,42 @@ def _resolve_merged_path(cli_path: Path | None) -> Path | None:
     return None
 
 
+def _print_pg_ligação_falhou(err: BaseException) -> None:
+    try:
+        import psycopg2
+        from pg_db import get_pg_dsn_dict
+
+        if not isinstance(err, psycopg2.OperationalError):
+            return
+        p = get_pg_dsn_dict()
+        h, port = p.get("host"), p.get("port")
+        db, user = p.get("dbname", "?"), p.get("user", "?")
+    except Exception:
+        return
+    print(
+        "\n--- PostgreSQL: ligação falhou ---\n"
+        f"  Tentativa: host={h!r}  port={port}  database={db!r}  user={user!r}\n"
+        "  Isto costuma acontecer se a porta 5432 não estiver acessível a este PC, se o\n"
+        "  servidor só aceitar ligações locais, ou se o `ORACULO_PG_HOST` no `.env` estiver errado.\n"
+        "  - Na VPS: regra de firewall/Hostinger; `listen_addresses` e `pg_hba.conf` (IP permitido).\n"
+        "  - Túnel SSH (exemplo):  ssh -L 5433:127.0.0.1:5432 user@servidor  "
+        "e no `.env`  ORACULO_PG_HOST=127.0.0.1  ORACULO_PG_PORT=5433\n"
+        "  - Só interface, sem base de dados nem modelo:  ./serve.sh -- --ui-only\n"
+        f"  Detalhe: {err}\n"
+        "--------------------------------\n",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _engine, _ui_only
-    init_db()
-    init_chat_tables()
+    try:
+        init_db()
+    except Exception as err:
+        _print_pg_ligação_falhou(err)
+        raise
     print("Base de utilizadores e sessões de chat: pronta.", flush=True)
     args = _startup_args if _startup_args is not None else _parse_args()
     if args.ui_only:
