@@ -24,7 +24,7 @@ import re
 import secrets
 import sys
 import threading
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -60,6 +60,7 @@ from auth_db import (
     get_user_names,
     init_db,
     is_user_admin,
+    list_all_users,
     set_global_system_prompt,
     set_user_display_name,
     set_user_email,
@@ -84,6 +85,25 @@ from chat_sessions_db import (
 STATIC_DIR = _SERVER_DIR / "static"
 
 _gen_lock = threading.Lock()
+_active_gen_uid_lock = threading.Lock()
+_active_generation_user_id: int | None = None
+_user_presence_lock = threading.Lock()
+_user_presence: dict[int, float] = {}
+PRESENCE_ONLINE_S = 300.0
+
+
+@contextmanager
+def _gen_lock_tracked(user_id: int | None) -> Any:
+    """Envolve o lock global de geração e regista o utilizador que detém a inferência (UI de «servidor ocupado»)."""
+    global _active_generation_user_id
+    with _active_gen_uid_lock:
+        _active_generation_user_id = user_id
+    try:
+        with _gen_lock:
+            yield
+    finally:
+        with _active_gen_uid_lock:
+            _active_generation_user_id = None
 _engine: dict | None = None
 _ui_only: bool = False
 _startup_args: argparse.Namespace | None = None
@@ -326,14 +346,33 @@ class AuthIn(BaseModel):
         return v
 
 
+def _touch_user_presence(user_id: int) -> None:
+    with _user_presence_lock:
+        _user_presence[int(user_id)] = time.time()
+
+
 def _require_user_id(request: Request) -> int:
     uid = request.session.get("user_id")
     if uid is None:
         raise HTTPException(status_code=401, detail="Não autenticado.")
-    return int(uid)
+    u = int(uid)
+    _touch_user_presence(u)
+    return u
+
+
+def _require_admin(request: Request) -> int:
+    uid = request.session.get("user_id")
+    if uid is None:
+        raise HTTPException(status_code=401, detail="Não autenticado.")
+    u = int(uid)
+    _touch_user_presence(u)
+    if not is_user_admin(u):
+        raise HTTPException(status_code=403, detail="Apenas administrador.")
+    return u
 
 
 UserIdDep = Annotated[int, Depends(_require_user_id)]
+AdminIdDep = Annotated[int, Depends(_require_admin)]
 
 
 def _user_settings_out(uid: int) -> UserModelSettingsOut:
@@ -540,7 +579,7 @@ def _title_after_turn(user_id: int, session_id: int, last_user: str, assistant: 
             ),
         }
     ]
-    with _gen_lock:
+    with _gen_lock_tracked(int(user_id)):
         if _engine is None:
             set_session_title_from_model(
                 user_id, session_id, _fallback_title_from_user_line(last_user)
@@ -588,12 +627,14 @@ def _run_generate_locked(
     max_new_tokens: int,
     temperature: float,
     top_p: float,
+    user_id: int | None = None,
 ) -> str:
-    with _gen_lock:
+    with _gen_lock_tracked(user_id):
         return _run_generate(messages, max_new_tokens, temperature, top_p)
 
 
 def _sse_stream_locked(
+    user_id: int,
     messages: list[dict],
     max_new_tokens: int,
     temperature: float,
@@ -605,7 +646,7 @@ def _sse_stream_locked(
     assert _engine is not None
     tokenizer = _engine["tokenizer"]
     model = _engine["model"]
-    with _gen_lock:
+    with _gen_lock_tracked(int(user_id)):
         for delta in generate_chat_reply_stream(
             tokenizer,
             model,
@@ -659,7 +700,7 @@ def _job_worker(
     try:
         t0: float
         t1: float
-        with _gen_lock:
+        with _gen_lock_tracked((int(user_id) if user_id is not None else None)):
             t0 = time.perf_counter()
             for delta in generate_chat_reply_stream(
                 tokenizer,
@@ -765,6 +806,22 @@ async def page_registar(request: Request):
     return FileResponse(p, media_type="text/html; charset=utf-8")
 
 
+@app.get("/admin")
+async def page_admin(request: Request):
+    uid = request.session.get("user_id")
+    if not uid:
+        return RedirectResponse(url="/login", status_code=302)
+    if not is_user_admin(int(uid)):
+        return RedirectResponse(url="/", status_code=302)
+    p = STATIC_DIR / "admin.html"
+    if not p.is_file():
+        return HTMLResponse(
+            "<p>Falta server/static/admin.html</p>",
+            status_code=500,
+        )
+    return FileResponse(p, media_type="text/html; charset=utf-8")
+
+
 def _file_response_or_404(path: Path, media_type: str) -> FileResponse:
     if not path.is_file():
         raise HTTPException(status_code=404, detail=f"{path.name} em falta.")
@@ -780,6 +837,11 @@ async def serve_app_css():
 @app.get("/app.js")
 async def serve_app_js():
     return _file_response_or_404(STATIC_DIR / "app.js", "application/javascript; charset=utf-8")
+
+
+@app.get("/admin.js")
+async def serve_admin_js():
+    return _file_response_or_404(STATIC_DIR / "admin.js", "application/javascript; charset=utf-8")
 
 
 @app.get("/static/app.css")
@@ -806,6 +868,70 @@ async def status(_uid: UserIdDep):
     }
 
 
+@app.get("/api/admin/users")
+async def api_admin_list_users(_admin: AdminIdDep) -> dict[str, list]:
+    now = time.time()
+    with _user_presence_lock:
+        pres = dict(_user_presence)
+    with _active_gen_uid_lock:
+        gen_uid = _active_generation_user_id
+    users = list_all_users()
+    out: list[dict[str, Any]] = []
+    for u in users:
+        uidi = int(u["id"])
+        last = pres.get(uidi, 0.0)
+        out.append(
+            {
+                **u,
+                "online": (now - last) < PRESENCE_ONLINE_S and last > 0,
+                "using_server": gen_uid is not None and int(gen_uid) == uidi,
+            }
+        )
+    return {"users": out}
+
+
+@app.get("/api/admin/users/{target_id}/sessions")
+async def api_admin_user_sessions(
+    _admin: AdminIdDep, target_id: int
+) -> dict[str, list]:
+    if target_id < 1:
+        raise HTTPException(status_code=400, detail="id inválido.")
+    return {"sessions": list_sessions(int(target_id))}
+
+
+@app.get("/api/admin/users/{target_id}/sessions/{session_id}")
+async def api_admin_user_session(
+    _admin: AdminIdDep, target_id: int, session_id: int
+) -> dict:
+    if target_id < 1 or session_id < 1:
+        raise HTTPException(status_code=400, detail="id inválido.")
+    out = get_session_messages(int(target_id), int(session_id))
+    if not out:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada.")
+    messages, title = out
+    return {
+        "id": session_id,
+        "user_id": target_id,
+        "title": title,
+        "messages": messages,
+    }
+
+
+@app.get("/api/chat/generation-status")
+async def api_chat_generation_status(_uid: UserIdDep) -> dict[str, bool]:
+    """
+    Se `active` e não `yours`, outro utilizador detém a inferência (fila de um pedido de cada vez).
+    """
+    if _ui_only or _engine is None:
+        return {"active": False, "yours": False}
+    uid = int(_uid)
+    with _active_gen_uid_lock:
+        holder = _active_generation_user_id
+    if holder is None:
+        return {"active": False, "yours": False}
+    return {"active": True, "yours": holder == uid}
+
+
 @app.post("/api/chat", response_model=ChatOut)
 async def chat(_uid: UserIdDep, body: ChatIn):
     if _engine is None:
@@ -825,7 +951,9 @@ async def chat(_uid: UserIdDep, body: ChatIn):
     try:
         reply = await loop.run_in_executor(
             None,
-            lambda m=msgs, mt=mnt, t=temp, tp=top_p: _run_generate_locked(m, mt, t, tp),
+            lambda m=msgs, mt=mnt, t=temp, tp=top_p, u=uid: _run_generate_locked(
+                m, mt, t, tp, u
+            ),
         )
     except Exception as err:
         raise HTTPException(status_code=500, detail=str(err)) from err
@@ -854,6 +982,7 @@ async def chat_stream(request: Request, body: ChatIn, _uid: UserIdDep):
     def sse_iter():
         try:
             yield from _sse_stream_locked(
+                uid,
                 msgs,
                 mnt,
                 temp,
@@ -940,6 +1069,7 @@ async def create_chat_job(_uid: UserIdDep, body: ChatJobIn):
             "text": "",
             "error": None,
             "cancel_event": cancel_event,
+            "user_id": uid,
         }
     session_id: int | None = body.session_id
     user_id: int = int(_uid)

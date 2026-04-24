@@ -7,6 +7,8 @@
   const logEl = document.getElementById("log");
   const mainScrollEl = document.querySelector(".main-scroll");
   const logInner = document.getElementById("log-inner");
+  const serverBusyBanner = document.getElementById("server-busy-banner");
+  const composerOuter = document.getElementById("composer-outer");
   const emptyState = document.getElementById("empty-state");
   const inputEl = document.getElementById("input");
   const sendBtn = document.getElementById("send");
@@ -95,6 +97,9 @@
 
   /** Intervalo entre pedidos GET ao estado do job (geração em background no servidor). */
   const JOB_POLL_MS = 400;
+  const GEN_STATUS_POLL_MS = 2500;
+  let generationBlockedByOther = false;
+  let genStatusTimer = null;
 
   function sleepPoll(ms, signal) {
     return new Promise(function (resolve, reject) {
@@ -232,9 +237,44 @@
       sendBtn.setAttribute("title", "Enviar");
       sendBtn.innerHTML = SEND_BTN_ICON;
       const hasText = inputEl.value.trim().length > 0;
-      sendBtn.disabled = !hasText;
+      const blockSend = generationBlockedByOther;
+      sendBtn.disabled = !hasText || blockSend;
       setNewChatButtonsDisabled(false);
     }
+  }
+
+  function applyGenerationStatus(active, yours) {
+    const other = active && !yours;
+    generationBlockedByOther = other;
+    if (serverBusyBanner) {
+      serverBusyBanner.hidden = !other;
+    }
+    if (composerOuter) {
+      composerOuter.classList.toggle("composer-outer--server-busy", other);
+    }
+    updateSendState();
+  }
+
+  async function tickGenerationStatus() {
+    try {
+      const r = await apiFetch("/api/chat/generation-status");
+      if (r.status === 401) {
+        return;
+      }
+      if (!r.ok) {
+        return;
+      }
+      const j = await r.json();
+      applyGenerationStatus(!!j.active, !!j.yours);
+    } catch (_) {}
+  }
+
+  function startGenerationStatusPolling() {
+    if (genStatusTimer) {
+      return;
+    }
+    void tickGenerationStatus();
+    genStatusTimer = setInterval(tickGenerationStatus, GEN_STATUS_POLL_MS);
   }
 
   function updateEmptyState() {
@@ -376,6 +416,12 @@
     return v === true || v === 1;
   }
 
+  function setAdminNavVisible(show) {
+    document.querySelectorAll(".admin-only").forEach(function (el) {
+      el.hidden = !show;
+    });
+  }
+
   function setUserNameLabels(name, username) {
     const t = (name != null && name !== "" ? name : null) || username || "";
     const u = username || t;
@@ -490,6 +536,7 @@
       if (r.ok) {
         const j = await r.json();
         currentUserIsAdmin = isAdminFromApi(j.is_admin);
+        setAdminNavVisible(currentUserIsAdmin);
         if (settingsBlockGlobal) {
           settingsBlockGlobal.hidden = !currentUserIsAdmin;
         }
@@ -640,6 +687,7 @@
       if (j && j.authenticated) {
         setUserNameLabels(j.name, j.username);
         currentUserIsAdmin = isAdminFromApi(j.is_admin);
+        setAdminNavVisible(currentUserIsAdmin);
       }
     } catch (_) {}
   }
@@ -1422,6 +1470,7 @@
       delete sendBtn.dataset.busy;
       updateSendState();
       void loadSessionList();
+      void tickGenerationStatus();
       inputEl.focus();
     }
   }
@@ -1471,6 +1520,7 @@
     await loadSessionUser();
     await bootChats();
     refreshStatus();
+    startGenerationStatusPolling();
   })();
   setInterval(refreshStatus, 8000);
 })();

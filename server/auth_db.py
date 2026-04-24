@@ -6,6 +6,7 @@ Ficheiro: server/data/oraculo_users.db
 from __future__ import annotations
 
 import hashlib
+from typing import Any
 import os
 import re
 import sqlite3
@@ -314,6 +315,34 @@ def is_user_admin(user_id: int) -> bool:
     if not row:
         return False
     return int(row[0] or 0) == 1
+
+
+def list_all_users() -> list[dict[str, Any]]:
+    """Lista todos os utilizadores (painel de admin)."""
+    with _db_lock:
+        con = sqlite3.connect(_DB_PATH, timeout=30.0)
+        try:
+            rows = con.execute(
+                """
+                SELECT id, username, COALESCE(NULLIF(TRIM(display_name), ''), username)
+                , is_admin
+                FROM users
+                ORDER BY id
+                """
+            ).fetchall()
+        finally:
+            con.close()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        out.append(
+            {
+                "id": int(r[0]),
+                "username": str(r[1] or ""),
+                "display_name": str(r[2] or r[1] or ""),
+                "is_admin": int(r[3] or 0) == 1,
+            }
+        )
+    return out
 
 
 def get_global_system_prompt() -> str:
