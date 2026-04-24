@@ -880,7 +880,7 @@
     });
   }
 
-  function appendMessage(role, content) {
+  function appendMessage(role, content, genStats) {
     const stack = document.createElement("div");
     stack.className =
       "msg-stack " + (role === "assistant" ? "msg-stack--assistant" : "msg-stack--user");
@@ -899,6 +899,12 @@
       bar.appendChild(copyBtn);
       bar.appendChild(createAssistantStatsEl());
       stack.appendChild(bar);
+      if (genStats) {
+        const statsEl = bar.querySelector(".msg__stats");
+        if (statsEl) {
+          setAssistantGenStats(statsEl, genStats);
+        }
+      }
     } else {
       stack.appendChild(copyBtn);
     }
@@ -1021,6 +1027,18 @@
     }
 
     li.appendChild(row);
+    if (!isEditing) {
+      const tTok = s.total_output_tokens != null ? Number(s.total_output_tokens) : 0;
+      const tSec = s.total_gen_seconds != null ? Number(s.total_gen_seconds) : 0;
+      if (tTok > 0 || tSec > 0) {
+        const meta = document.createElement("div");
+        meta.className = "session-list__meta";
+        const tps = tSec > 0 && tTok > 0 ? (tTok / tSec).toFixed(2) : "—";
+        meta.textContent =
+          tTok + " tokens · " + formatGenSec(tSec) + " · " + tps + " t/s";
+        li.appendChild(meta);
+      }
+    }
     return li;
   }
 
@@ -1154,7 +1172,15 @@
       const m = msgs[i];
       if (m.role === "user" || m.role === "assistant") {
         history.push({ role: m.role, content: m.content });
-        appendMessage(m.role, m.content);
+        const genStats =
+          m.role === "assistant"
+            ? {
+                output_tokens: m.output_tokens,
+                gen_seconds: m.gen_seconds,
+                tokens_per_sec: m.tokens_per_sec,
+              }
+            : null;
+        appendMessage(m.role, m.content, genStats);
       }
     }
     updateEmptyState();

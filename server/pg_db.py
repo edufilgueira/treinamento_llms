@@ -209,5 +209,48 @@ def init_schema() -> None:
             ON chat_messages (session_id, pos)
             """
         )
+        _ensure_chat_stats_columns(cur)
     finally:
         con.close()
+
+
+def _ensure_chat_stats_columns(cur: Any) -> None:
+    """Migração idempotente: totais da sessão e métricas por mensagem (assistente)."""
+    cur.execute(
+        """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'chat_sessions'
+        """
+    )
+    have_s = {r[0] for r in cur.fetchall()}
+    if "total_output_tokens" not in have_s:
+        cur.execute(
+            """
+            ALTER TABLE chat_sessions
+            ADD COLUMN total_output_tokens INTEGER NOT NULL DEFAULT 0
+            """
+        )
+    if "total_gen_seconds" not in have_s:
+        cur.execute(
+            """
+            ALTER TABLE chat_sessions
+            ADD COLUMN total_gen_seconds DOUBLE PRECISION NOT NULL DEFAULT 0
+            """
+        )
+    cur.execute(
+        """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'chat_messages'
+        """
+    )
+    have_m = {r[0] for r in cur.fetchall()}
+    if "output_tokens" not in have_m:
+        cur.execute("ALTER TABLE chat_messages ADD COLUMN output_tokens INTEGER NULL")
+    if "gen_seconds" not in have_m:
+        cur.execute(
+            "ALTER TABLE chat_messages ADD COLUMN gen_seconds DOUBLE PRECISION NULL"
+        )
+    if "tokens_per_sec" not in have_m:
+        cur.execute(
+            "ALTER TABLE chat_messages ADD COLUMN tokens_per_sec DOUBLE PRECISION NULL"
+        )

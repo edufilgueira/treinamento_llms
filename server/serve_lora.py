@@ -779,13 +779,24 @@ def _job_worker(
                 j["status"] = "done"
             is_done = j["status"] == "done" and not j["cancel_event"].is_set()
             asst_text = (j.get("text") or "") if is_done else ""
+            persist_toks = toks
+            persist_sec = float(j["gen_seconds"])
+            persist_tps = float(j["tokens_per_sec"])
         if is_done and session_id and user_id and asst_text.strip():
             last_u = ""
             for m in reversed(messages):
                 if m.get("role") == "user":
                     last_u = str(m.get("content", ""))
                     break
-            if last_u and append_turn(int(user_id), int(session_id), last_u, asst_text):
+            if last_u and append_turn(
+                int(user_id),
+                int(session_id),
+                last_u,
+                asst_text,
+                output_tokens=persist_toks,
+                gen_seconds=persist_sec,
+                tokens_per_sec=persist_tps,
+            ):
                 u_pl = plain_for_storage(last_u)
                 a_pl = plain_for_storage(asst_text)
                 threading.Thread(
@@ -950,12 +961,13 @@ async def api_admin_user_session(
     out = get_session_messages(int(target_id), int(session_id))
     if not out:
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
-    messages, title = out
+    messages, title, session_meta = out
     return {
         "id": session_id,
         "user_id": target_id,
         "title": title,
         "messages": messages,
+        **session_meta,
     }
 
 
@@ -1061,8 +1073,8 @@ async def api_get_session(_uid: UserIdDep, session_id: int):
     out = get_session_messages(int(_uid), session_id)
     if out is None:
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
-    messages, title = out
-    return {"id": session_id, "title": title, "messages": messages}
+    messages, title, session_meta = out
+    return {"id": session_id, "title": title, "messages": messages, **session_meta}
 
 
 @app.patch("/api/sessions/{session_id}")

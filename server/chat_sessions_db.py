@@ -93,7 +93,8 @@ def list_sessions(user_id: int, limit: int = 100) -> list[dict[str, Any]]:
             with con.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT id, title, created_at, updated_at
+                    SELECT id, title, created_at, updated_at,
+                           total_output_tokens, total_gen_seconds
                     FROM chat_sessions
                     WHERE user_id = %s
                     ORDER BY updated_at DESC
@@ -107,32 +108,46 @@ def list_sessions(user_id: int, limit: int = 100) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for r in rows:
         ca, ua = r[2], r[3]
+        tot_tok, tot_sec = int(r[4] or 0), float(r[5] or 0.0)
         out.append(
             {
                 "id": r[0],
                 "title": r[1],
                 "created_at": ca.isoformat() if hasattr(ca, "isoformat") else str(ca or ""),
                 "updated_at": ua.isoformat() if hasattr(ua, "isoformat") else str(ua or ""),
+                "total_output_tokens": tot_tok,
+                "total_gen_seconds": tot_sec,
             }
         )
     return out
 
 
-def get_session_messages(user_id: int, session_id: int) -> tuple[list[dict], str] | None:
+def get_session_messages(
+    user_id: int, session_id: int
+) -> tuple[list[dict[str, Any]], str, dict[str, Any]] | None:
     if not _owns(user_id, session_id):
         return None
     with _db_lock:
         con = get_connection()
         try:
             with con.cursor() as cur:
-                cur.execute("SELECT title FROM chat_sessions WHERE id = %s", (session_id,))
+                cur.execute(
+                    """
+                    SELECT title, total_output_tokens, total_gen_seconds
+                    FROM chat_sessions WHERE id = %s
+                    """,
+                    (session_id,),
+                )
                 trow = cur.fetchone()
                 if not trow:
                     return None
                 title = str(trow[0])
+                tot_tok = int(trow[1] or 0)
+                tot_sec = float(trow[2] or 0.0)
                 cur.execute(
                     """
-                    SELECT role, content FROM chat_messages
+                    SELECT role, content, output_tokens, gen_seconds, tokens_per_sec
+                    FROM chat_messages
                     WHERE session_id = %s
                     ORDER BY pos ASC, id ASC
                     """,
@@ -141,10 +156,22 @@ def get_session_messages(user_id: int, session_id: int) -> tuple[list[dict], str
                 rows = cur.fetchall()
         finally:
             con.close()
-    return (
-        [{"role": str(r[0]), "content": str(r[1])} for r in rows],
-        title,
-    )
+    session_meta: dict[str, Any] = {
+        "total_output_tokens": tot_tok,
+        "total_gen_seconds": tot_sec,
+    }
+    msg_list: list[dict[str, Any]] = []
+    for r in rows:
+        d: dict[str, Any] = {"role": str(r[0]), "content": str(r[1])}
+        if str(r[0]) == "assistant":
+            if r[2] is not None:
+                d["output_tokens"] = int(r[2])
+            if r[3] is not None:
+                d["gen_seconds"] = float(r[3])
+            if r[4] is not None:
+                d["tokens_per_sec"] = float(r[4])
+        msg_list.append(d)
+    return (msg_list, title, session_meta)
 
 
 def delete_session(user_id: int, session_id: int) -> bool:
@@ -165,12 +192,21 @@ def delete_session(user_id: int, session_id: int) -> bool:
 
 
 def append_turn(
-    user_id: int, session_id: int, user_text: str, assistant_text: str
+    user_id: int,
+    session_id: int,
+    user_text: str,
+    assistant_text: str,
+    *,
+    output_tokens: int | None = None,
+    gen_seconds: float | None = None,
+    tokens_per_sec: float | None = None,
 ) -> bool:
     if not _owns(user_id, session_id):
         return False
     user_text = user_text or ""
     assistant_text = assistant_text or ""
+    add_tok = int(output_tokens) if output_tokens is not None else 0
+    add_sec = float(gen_seconds) if gen_seconds is not None else 0.0
     with _db_lock:
         con = get_connection()
         try:
@@ -184,22 +220,47 @@ def append_turn(
                     base = int(row[0]) + 1
                     cur.execute(
                         """
-                        INSERT INTO chat_messages (session_id, role, content, pos)
-                        VALUES (%s, 'user', %s, %s)
+                        INSERT INTO chat_messages (
+                            session_id, role, content, pos,
+                            output_tokens, gen_seconds, tokens_per_sec
+                        )
+                        VALUES (%s, 'user', %s, %s, NULL, NULL, NULL)
                         """,
                         (session_id, user_text, base),
                     )
                     cur.execute(
                         """
-                        INSERT INTO chat_messages (session_id, role, content, pos)
-                        VALUES (%s, 'assistant', %s, %s)
+                        INSERT INTO chat_messages (
+                            session_id, role, content, pos,
+                            output_tokens, gen_seconds, tokens_per_sec
+                        )
+                        VALUES (%s, 'assistant', %s, %s, %s, %s, %s)
                         """,
-                        (session_id, assistant_text, base + 1),
+                        (
+                            session_id,
+                            assistant_text,
+                            base + 1,
+                            output_tokens,
+                            gen_seconds,
+                            tokens_per_sec,
+                        ),
                     )
-                    cur.execute(
-                        "UPDATE chat_sessions SET updated_at = NOW() WHERE id = %s",
-                        (session_id,),
-                    )
+                    if output_tokens is not None or gen_seconds is not None:
+                        cur.execute(
+                            """
+                            UPDATE chat_sessions
+                            SET updated_at = NOW(),
+                                total_output_tokens = total_output_tokens + %s,
+                                total_gen_seconds = total_gen_seconds + %s
+                            WHERE id = %s
+                            """,
+                            (add_tok, add_sec, session_id),
+                        )
+                    else:
+                        cur.execute(
+                            "UPDATE chat_sessions SET updated_at = NOW() WHERE id = %s",
+                            (session_id,),
+                        )
         finally:
             con.close()
     return True

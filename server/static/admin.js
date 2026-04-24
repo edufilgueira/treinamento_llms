@@ -216,7 +216,23 @@
         li.className = "admin-session-row";
         const sid = s.id;
         const title = (s.title || "Conversa").trim() || "Conversa";
-        li.textContent = title;
+        const titleEl = document.createElement("div");
+        titleEl.className = "admin-session-row__title";
+        titleEl.textContent = title;
+        li.appendChild(titleEl);
+        const tTok = s.total_output_tokens != null ? Number(s.total_output_tokens) : 0;
+        const tSec = s.total_gen_seconds != null ? Number(s.total_gen_seconds) : 0;
+        if (tTok > 0 || tSec > 0) {
+          const tps = tSec > 0 && tTok > 0 ? (tTok / tSec).toFixed(2) : "—";
+          const meta = document.createElement("div");
+          meta.className = "admin-session-row__meta";
+          const secStr =
+            tSec > 0 && Number.isFinite(tSec)
+              ? tSec.toFixed(1).replace(/\.0$/, "") + "s"
+              : "—";
+          meta.textContent = tTok + " tokens · " + secStr + " · " + tps + " t/s";
+          li.appendChild(meta);
+        }
         li.title = "Abrir histórico";
         li.setAttribute("role", "button");
         li.setAttribute("tabindex", "0");
@@ -275,6 +291,28 @@
         }
         row.appendChild(label);
         row.appendChild(body);
+        if (
+          role === "assistant" &&
+          (m.output_tokens != null || m.gen_seconds != null || m.tokens_per_sec != null)
+        ) {
+          const stEl = document.createElement("div");
+          stEl.className = "admin-view-msg__stats";
+          const parts = [];
+          if (m.output_tokens != null) {
+            parts.push(String(m.output_tokens) + " tokens");
+          }
+          if (m.gen_seconds != null) {
+            const n = Number(m.gen_seconds);
+            if (Number.isFinite(n) && n >= 0) {
+              parts.push(n.toFixed(1).replace(/\.0$/, "") + "s");
+            }
+          }
+          if (m.tokens_per_sec != null) {
+            parts.push(Number(m.tokens_per_sec).toFixed(2) + " t/s");
+          }
+          stEl.textContent = parts.join(" · ");
+          row.appendChild(stEl);
+        }
         viewLog.appendChild(row);
       });
       viewModal.hidden = false;
