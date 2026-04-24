@@ -1027,18 +1027,6 @@
     }
 
     li.appendChild(row);
-    if (!isEditing) {
-      const tTok = s.total_output_tokens != null ? Number(s.total_output_tokens) : 0;
-      const tSec = s.total_gen_seconds != null ? Number(s.total_gen_seconds) : 0;
-      if (tTok > 0 || tSec > 0) {
-        const meta = document.createElement("div");
-        meta.className = "session-list__meta";
-        const tps = tSec > 0 && tTok > 0 ? (tTok / tSec).toFixed(2) : "—";
-        meta.textContent =
-          tTok + " tokens · " + formatGenSec(tSec) + " · " + tps + " t/s";
-        li.appendChild(meta);
-      }
-    }
     return li;
   }
 

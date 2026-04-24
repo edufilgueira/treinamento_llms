@@ -123,19 +123,6 @@ body.menu-open {
   margin: 0.1rem 0;
 }
 
-.session-list__meta {
-  font-size: 0.65rem;
-  line-height: 1.2;
-  opacity: 0.7;
-  padding: 0 0.4rem 0.25rem 0.5rem;
-  color: var(--text-muted, rgba(255, 255, 255, 0.55));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-  box-sizing: border-box;
-}
-
 .session-list__row {
   display: flex;
   align-items: center;
