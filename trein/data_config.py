@@ -14,7 +14,7 @@ manter treino, inferência e merge alinhados.
   **sobrescreve** o mesmo arquivo (ex.: train_2025-03_v1.jsonl).
 - Ao subir para v2, altere DATASET_VERSION para "v2" e SNAPSHOT_DATE_PREFIX para um
   novo período (ex.: "2025-04"); aí será criado train_2025-04_v2.jsonl e o treino
-  passará a preferir a **maior versão** presente em data/snapshots/ (ver resolve_train_file).
+  passará a preferir a **maior versão** presente em trein/data/snapshots/ (ver resolve_train_file).
 """
 
 from __future__ import annotations
@@ -45,8 +45,11 @@ def apply_loading_progress_env() -> None:
         os.environ.pop("HF_HUB_DISABLE_PROGRESS_BARS", None)
 
 
-# Diretório deste repositório (pasta que contém train_lora.py e data/)
-ROOT = Path(__file__).resolve().parent
+# Pasta `trein/` (datasets, snapshots, outputs de adapter/merge relativos a ela).
+TREIN_ROOT = Path(__file__).resolve().parent
+# Raiz do repositório (pai de `trein/` e `server/`).
+REPO_ROOT = TREIN_ROOT.parent
+ROOT = TREIN_ROOT
 
 # --- Modelo base no Hugging Face (mesmo ID em treino, inferência e merge) ---
 # Use modelos **causais de texto** (Chat/Instruct): TinyLlama, Llama, Qwen2, Mistral, etc.
@@ -105,14 +108,14 @@ def find_best_snapshot(snapshots_dir: Path | None = None) -> Path | None:
     return max(candidates, key=_snapshot_version_key)
 
 
-EXAMPLE_FALLBACK = ROOT / "data" / "exemplo_treino.jsonl"
+EXAMPLE_FALLBACK = ROOT / "data" / "raw" / "exemplo" / "exemplo_treino.jsonl"
 
 
 def resolve_train_file(explicit: Path | None) -> Path:
     """
     Se `explicit` for passado, usa esse caminho.
     Caso contrário: maior versão em SNAPSHOTS_DIR; se não houver snapshot,
-    usa data/exemplo_treino.jsonl se existir.
+    usa trein/data/raw/exemplo/exemplo_treino.jsonl se existir.
     """
     if explicit is not None:
         return explicit
@@ -122,6 +125,6 @@ def resolve_train_file(explicit: Path | None) -> Path:
     if EXAMPLE_FALLBACK.is_file():
         return EXAMPLE_FALLBACK
     raise FileNotFoundError(
-        "Nenhum snapshot em data/snapshots/ (train_*_v*.jsonl) nem data/exemplo_treino.jsonl. "
-        "Rode: python build_snapshot.py"
+        "Nenhum snapshot em trein/data/snapshots/ (train_*_v*.jsonl) nem exemplo em "
+        "trein/data/raw/exemplo/. Rode: python trein/build_snapshot.py (na raiz do repo)."
     )

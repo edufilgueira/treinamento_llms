@@ -1,17 +1,21 @@
 # Servidor local LoRA (`serve_lora.py`)
 
-Este diretório contém o **servidor HTTP** que carrega o modelo **uma única vez** e responde a pedidos de chat. Assim não precisas de voltar a carregar vários gigabytes sempre que quiseres uma resposta (como aconteceria ao correr `inferir.py` de cada vez).
+Este diretório contém o **servidor HTTP** que carrega o modelo **uma única vez** e responde a pedidos de chat. Assim não precisas de voltar a carregar vários gigabytes sempre que quiseres uma resposta (como aconteceria ao correr `trein/inferir.py` de cada vez).
+
+## Variáveis de ambiente (PostgreSQL, etc.)
+
+Copia `server/.env.example` para **`server/.env`** e preenche `ORACULO_PG_*` (e o que precisares). O servidor carrega primeiro `.env` na **raiz** do repositório (se existir) e depois **`server/.env`**, que **substitui** chaves repetidas. Para credenciais só do Oráculo, basta `server/.env`.
 
 ## O que precisas antes
 
-1. **Raiz do projeto** — a pasta *pai* desta (`server/`), onde estão `train_lora.py`, `data_config.py`, `lora_engine.py` e `requirements.txt`.
+1. **Raiz do projeto** — a pasta *pai* desta (`server/`), com `server/requirements.txt` (e opcionalmente `requirements.txt` na raiz que junta treino+servidor), `trein/data_config.py` (config partilhada) e `server/lora_engine.py`.
 
-2. **Treino concluído** — normalmente existirá `outputs/lora_adapter/` com o adapter gerado pelo `train_lora.py` (ou um modelo fundido em `outputs/merged_model/` após o `merge_lora.py`).
+2. **Treino concluído** — normalmente existirá `trein/outputs/lora_adapter/` com o adapter gerado pelo `trein/train_lora.py` (ou um modelo fundido em `trein/outputs/merged_model/` após o `trein/merge_lora.py`).
 
 3. **Dependências** — na raiz do projeto:
 
    ```bash
-   pip install -r requirements.txt
+   pip install -r server/requirements.txt
    ```
 
    Inclui `fastapi` e `uvicorn` necessários para o servidor.
@@ -48,19 +52,19 @@ A página em `server/static/index.html` oferece um chat simples: escreves a mens
 
 ## De onde vêm o modelo base e o LoRA
 
-Os valores **por omissão** vêm de `../data_config.py` (relativo a esta pasta — ou seja, `data_config.py` na raiz do projeto):
+Os valores **por omissão** vêm de `../trein/data_config.py`:
 
 | Definição | Significado |
 |-----------|-------------|
 | `DEFAULT_MODEL_NAME` | ID do modelo base no Hugging Face (tem de ser o **mesmo** usado no treino). |
-| `DEFAULT_ADAPTER_DIR` | Pasta do adapter (por defeito `outputs/lora_adapter`). |
-| `DEFAULT_MERGED_MODEL_DIR` | Pasta do modelo fundido (`outputs/merged_model`). |
+| `DEFAULT_ADAPTER_DIR` | Pasta do adapter (por defeito `trein/outputs/lora_adapter`). |
+| `DEFAULT_MERGED_MODEL_DIR` | Pasta do modelo fundido (`trein/outputs/merged_model`). |
 
-Se alterares estes campos **uma vez** no `data_config.py`, o servidor, o `inferir.py` e o treino continuam alinhados.
+Se alterares estes campos **uma vez** no `trein/data_config.py`, o servidor, o `trein/inferir.py` e o treino continuam alinhados.
 
 ## Modelo fundido vs base + LoRA
 
-Ao arrancar, o script tenta usar o modelo **fundido** se existir `outputs/merged_model/config.json`. Nesse caso carrega só essa pasta (mais simples para inferência).
+Ao arrancar, o script tenta usar o modelo **fundido** se existir `trein/outputs/merged_model/config.json`. Nesse caso carrega só essa pasta (mais simples para inferência).
 
 Se não houver modelo fundido, carrega o **modelo base** (`DEFAULT_MODEL_NAME`) mais o adapter em `DEFAULT_ADAPTER_DIR`.
 
@@ -134,6 +138,6 @@ Só é processado **um pedido de geração de cada vez** (fila interna), para ev
 ## Resolução rápida de problemas
 
 - **Erro ao importar módulos** — corre a partir da **raiz** do repo, não dentro de `server/` com outro `cwd`, a menos que ajustes o `PYTHONPATH` manualmente.
-- **`ModuleNotFoundError: fastapi`** — `pip install -r requirements.txt` na raiz.
-- **Modelo não carrega / pasta não encontrada** — confirma que `outputs/lora_adapter` existe após o treino, ou passa `--adapter_dir` / treina de novo. Para fundido, verifica `config.json` dentro da pasta merged.
+- **`ModuleNotFoundError: fastapi`** — `pip install -r server/requirements.txt` (a partir da raiz do repositório).
+- **Modelo não carrega / pasta não encontrada** — confirma que `trein/outputs/lora_adapter` existe após o treino, ou passa `--adapter_dir` / treina de novo. Para fundido, verifica `config.json` dentro da pasta merged.
 - **Porta ocupada** — usa `--port 8766` (ou outra porta livre).

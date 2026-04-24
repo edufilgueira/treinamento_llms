@@ -12,6 +12,10 @@ import argparse
 import sys
 from pathlib import Path
 
+_TREIN = Path(__file__).resolve().parent
+if str(_TREIN) not in sys.path:
+    sys.path.insert(0, str(_TREIN))
+
 import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer

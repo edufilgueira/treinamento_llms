@@ -1,0 +1,7 @@
+# Extra para checkpoints AWQ/GPTQ no Hub (ex.: TheBloke/*-AWQ)
+# Instale depois de trein/requirements.txt:
+#   pip install -r trein/requirements.txt
+#   pip install -r trein/requirements-quantized.txt
+
+gptqmodel>=5.0.0
+optimum>=1.24.0

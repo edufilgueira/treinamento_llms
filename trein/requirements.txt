@@ -1,0 +1,18 @@
+# Treino e utilitários (train_lora, merge_lora, inferir, build_snapshot, verificar_ambiente)
+# Sem API nem PostgreSQL. Instale com: pip install -r trein/requirements.txt
+# (a partir da raiz do repositório; em CI podes apontar o caminho absoluto deste ficheiro)
+#
+# Git (CLI) — não é pacote pip; instale no sistema.
+#
+# Não precisa de gptqmodel / optimum para LoRA em FP32 habitual. Se precisar de checkpoint AWQ/GPTQ no Hub:
+#   pip install -r trein/requirements-quantized.txt
+
+torch>=2.1.0
+transformers>=4.40.0
+datasets>=2.18.0
+accelerate>=0.28.0
+peft>=0.11.0
+trl>=0.9.0
+sentencepiece>=0.2.0
+tiktoken>=0.7.0
+protobuf>=4.25.0

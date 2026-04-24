@@ -17,6 +17,10 @@ import random
 import sys
 from pathlib import Path
 
+_TREIN = Path(__file__).resolve().parent
+if str(_TREIN) not in sys.path:
+    sys.path.insert(0, str(_TREIN))
+
 from data_config import RAW_DIR, SNAPSHOTS_DIR, snapshot_output_path
 
 

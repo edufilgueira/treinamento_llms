@@ -2,6 +2,12 @@
 
 Este documento explica **passo a passo** como usar os scripts, **para que serve** cada etapa e **o que cada variável** (argumento de linha de comando ou configuração interna) faz.
 
+## Estrutura do repositório
+
+- **`trein/`** — `data_config.py`, `train_lora.py`, `inferir.py`, `data/`, `outputs/`. [trein/README.md](trein/README.md).
+- **`server/`** — API (FastAPI), ficheiros estáticos da UI, `lora_engine.py`, ligação PostgreSQL; **credenciais e variáveis de ambiente** do Oráculo: copiar [server/.env.example](server/.env.example) para `server/.env` e preencher. Guia: [server/README.md](server/README.md).
+- **Raiz** — `README.md` (este ficheiro); `requirements.txt` junta `trein/` + `server/`; ou instale só [trein/requirements.txt](trein/requirements.txt) / [server/requirements.txt](server/requirements.txt). (Opcional: `.env` na raiz; o Oráculo também lê `server/.env`, que tem prioridade.)
+
 ---
 
 ## Visão geral: o que esta pipeline faz
@@ -11,7 +17,7 @@ Este documento explica **passo a passo** como usar os scripts, **para que serve*
 3. Ele **injeta** adaptadores **LoRA** em camadas específicas da rede (só uma fração dos pesos é treinável).
 4. O **TRL** (`SFTTrainer`) faz o treino supervisionado de texto: o modelo aprende a prever o próximo token nas sequências montadas pelo *chat template*.
 5. O resultado salvo é um **adapter** (pastas pequenas) + **tokenizer** — **não** uma cópia inteira do modelo base.
-6. Na hora de testar, você carrega **o mesmo modelo base** + **o adapter** com o script **`inferir.py`** (detalhes em [README_INFERIR.md](README_INFERIR.md)).
+6. Na hora de testar, você carrega **o mesmo modelo base** + **o adapter** com o script **`inferir.py`** (detalhes em [README_INFERIR.md](trein/README_INFERIR.md)).
 7. **(Opcional)** Depois do treino, `merge_lora.py` **incorpora** o LoRA ao modelo base e grava um **único modelo** em disco (~mesmo tamanho do base no Hub), útil para deploy ou upload sem depender do adapter.
 
 **Por que LoRA?** Em vez de atualizar todos os bilhões de parâmetros do modelo, você treina matrizes pequenas “ao lado” das camadas. Isso **reduz memória** e **tempo**, ideal para notebook sem GPU.
@@ -37,8 +43,8 @@ A pasta **`.venv`** guarda o **ambiente virtual** deste projeto: uma cópia “p
 | **Isolamento** | Bibliotecas como `torch` e `transformers` ficam **dentro** de `.venv`, separadas do Python do sistema e de **outros projetos**. Assim, versões diferentes em cada projeto não se misturam. |
 | **Quem usa** | Depois de `source .venv/bin/activate` (Linux/macOS), os comandos `python` e `pip` passam a apontar para o que está em `.venv`. |
 | **Tamanho** | Pode ficar **grande** (vários GB) por causa do PyTorch e dependências. Isso é normal. |
-| **Git** | O projeto costuma **ignorar** `.venv` no `.gitignore` — não é obrigatório versionar essa pasta; outra pessoa recria com `python3 -m venv .venv` e `pip install -r requirements.txt`. |
-| **Apagar** | Se você apagar `.venv`, não perde o código do projeto; só o ambiente. Recrie com os comandos da Parte A e reinstale o `requirements.txt`. |
+| **Git** | O projeto costuma **ignorar** `.venv` no `.gitignore` — não é obrigatório versionar essa pasta; outra pessoa recria com `python3 -m venv .venv` e `pip install -r trein/requirements.txt` (só treino) ou `pip install -r requirements.txt` (treino+servidor). |
+| **Apagar** | Se você apagar `.venv`, não perde o código do projeto; só o ambiente. Recrie com os comandos da Parte A e reinstale o ficheiro `requirements` que usar. |
 
 O nome `.venv` é só uma convenção (poderia ser `venv` ou outro nome); o importante é **sempre ativar** esse ambiente antes de rodar os scripts desta pipeline.
 
@@ -53,10 +59,14 @@ Enquanto estiver ativo, o terminal costuma mostrar `(.venv)` no início da linha
 
 ### A.3 Instalar dependências
 
+Só a pipeline de **treino** (recomendado para esta guia, sem API nem PostgreSQL):
+
 ```bash
 python -m pip install --upgrade pip
-pip install -r requirements.txt
+pip install -r trein/requirements.txt
 ```
+
+Se quiser **máquina de desenvolvimento** com Oráculo + treino, na raiz: `pip install -r requirements.txt` (inclui `trein/` e `server/`).
 
 | Pacote (resumo) | Função |
 |-----------------|--------|
@@ -77,14 +87,14 @@ No treino usual, os pesos da rede são números em **precisão alta** (por exemp
 **AWQ** (*Activation-aware Weight Quantization*) é um **método** de quantização. Repositórios marcados como **`-AWQ`** no Hugging Face (muitos publicados por perfis como **TheBloke**) são **checkpoints já convertidos** para esse formato, em geral **4 bits por peso** (daí “menos memória, peso aproximado”). O modelo continua a ser **só texto** no sentido de tarefa (gerar código/respostas); o que muda é o **formato numérico dos tensores** guardados, não o facto de ser multimodal.
 
 **Por que `TheBloke/deepseek-coder-1.3b-instruct-AWQ` é AWQ**  
-Esse ID aponta para um repositório onde os pesos **já vêm quantizados** (AWQ). Por isso o `transformers` **não** carrega só com PyTorch “genérico”: precisa de bibliotecas extra (**`gptqmodel`**, e para LoRA sobre essas camadas também **`optimum`**, ver [requirements-quantized.txt](requirements-quantized.txt)). Já um ID como **`deepseek-ai/deepseek-coder-1.3b-instruct`** (sem sufixo AWQ) costuma trazer pesos em **FP16/BF16** “normais” — basta o [requirements.txt](requirements.txt) habitual.
+Esse ID aponta para um repositório onde os pesos **já vêm quantizados** (AWQ). Por isso o `transformers` **não** carrega só com PyTorch “genérico”: precisa de bibliotecas extra (**`gptqmodel`**, e para LoRA sobre essas camadas também **`optimum`**, ver [trein/requirements-quantized.txt](trein/requirements-quantized.txt)). Já um ID como **`deepseek-ai/deepseek-coder-1.3b-instruct`** (sem sufixo AWQ) costuma trazer pesos em **FP16/BF16** “normais” — basta o [trein/requirements.txt](trein/requirements.txt) habitual.
 
 **Quando usar cada ficheiro**
 
 | Situação | O que instalar |
 |----------|----------------|
-| Modelo base **não quantizado** no Hub (FP16/BF16, ou o cartão **não** menciona AWQ/GPTQ/4-bit) — ex.: `TinyLlama/...`, `deepseek-ai/deepseek-coder-1.3b-instruct` | `pip install -r requirements.txt` |
-| Modelo **AWQ** ou **GPTQ** no Hub — nome ou cartão com **AWQ**, **4-bit**, **TheBloke/...-AWQ**, etc. | `pip install -r requirements.txt` **e** `pip install -r requirements-quantized.txt` |
+| Modelo base **não quantizado** no Hub (FP16/BF16, ou o cartão **não** menciona AWQ/GPTQ/4-bit) — ex.: `TinyLlama/...`, `deepseek-ai/deepseek-coder-1.3b-instruct` | `pip install -r trein/requirements.txt` |
+| Modelo **AWQ** ou **GPTQ** no Hub — nome ou cartão com **AWQ**, **4-bit**, **TheBloke/...-AWQ**, etc. | `pip install -r trein/requirements.txt` **e** `pip install -r trein/requirements-quantized.txt` |
 
 **Recomendação para esta pipeline de LoRA**  
 Para **aprender e treinar com menos surpresas**, prefira um modelo **sem quantização** (`deepseek-ai/...`, `TinyLlama/...`, etc.). Use checkpoints **AWQ** em geral quando precisar de **caber em menos VRAM** na **inferência** ou quando já domina o ambiente; o treino LoRA em cima de AWQ é **mais exigente** em dependências e pode emitir avisos sobre tipos de camada.
@@ -92,7 +102,7 @@ Para **aprender e treinar com menos surpresas**, prefira um modelo **sem quantiz
 ### A.4 Verificar instalação
 
 ```bash
-python verificar_ambiente.py
+python trein/verificar_ambiente.py
 ```
 
 | Saída | Significado |
@@ -132,7 +142,7 @@ Exemplo mínimo (uma linha no arquivo):
 {"messages": [{"role": "user", "content": "Olá"}, {"role": "assistant", "content": "Olá! Em que posso ajudar?"}]}
 ```
 
-Se você tem **muitas fontes** (conversas, livros, Bíblia, psicologia, sintéticos, etc.) e o volume cresce com o tempo, veja o guia **[README_DATASETS.md](README_DATASETS.md)** — pastas `raw/` e `snapshots/`, metadados, balanceamento e quando unificar ou separar treinos.
+Se você tem **muitas fontes** (conversas, livros, Bíblia, psicologia, sintéticos, etc.) e o volume cresce com o tempo, veja o guia **[README_DATASETS.md](trein/README_DATASETS.md)** — pastas `raw/` e `snapshots/`, metadados, balanceamento e quando unificar ou separar treinos.
 
 ### B.2 O que o script faz com esses dados (internamente)
 
@@ -147,19 +157,19 @@ Se você tem **muitas fontes** (conversas, livros, Bíblia, psicologia, sintéti
 
 ### C.1 Comando básico
 
-Com **snapshot** gerado a partir de `data/raw/` (recomendado quando já há dados organizados):
+Com **snapshot** gerado a partir de `trein/data/raw/` (recomendado quando já há dados organizados):
 
 ```bash
-python build_snapshot.py
-python train_lora.py --output_dir outputs/lora_adapter
+python trein/build_snapshot.py
+python trein/train_lora.py --output_dir trein/outputs/lora_adapter
 ```
 
-Sem `--train_file`, o treino usa o arquivo `train_*_v*.jsonl` de **maior versão** em `data/snapshots/` (ver `data_config.py`). Detalhes da lógica: [README_SNAPSHOT.md](README_SNAPSHOT.md); organização dos dados: [README_DATASETS.md](README_DATASETS.md).
+Sem `--train_file`, o treino usa o arquivo `train_*_v*.jsonl` de **maior versão** em `trein/data/snapshots/` (ver `trein/data_config.py`). Detalhes da lógica: [README_SNAPSHOT.md](trein/README_SNAPSHOT.md); organização dos dados: [README_DATASETS.md](trein/README_DATASETS.md).
 
 Forçar um JSONL concreto (ex.: teste rápido):
 
 ```bash
-python train_lora.py --train_file data/exemplo_treino.jsonl --output_dir outputs/lora_adapter
+python trein/train_lora.py --train_file trein/data/raw/exemplo/exemplo_treino.jsonl --output_dir trein/outputs/lora_adapter
 ```
 
 Se você não passar outros argumentos, valem os **padrões** descritos na tabela abaixo.
@@ -168,9 +178,9 @@ Se você não passar outros argumentos, valem os **padrões** descritos na tabel
 
 | Argumento | Padrão | O que faz |
 |-----------|--------|-----------|
-| `--model_name` | `data_config.DEFAULT_MODEL_NAME` | **ID do modelo** no Hugging Face Hub (definido em [data_config.py](data_config.py)). O mesmo ID deve ser usado na inferência ([README_INFERIR.md](README_INFERIR.md)) e no merge. Prefira variantes **Chat** ou **Instruct** para ter `apply_chat_template` correto. |
-| `--train_file` | (omitido) | **Caminho** do JSONL com a coluna `messages`. Se **omitido**: maior versão em `data/snapshots/`, senão `data/exemplo_treino.jsonl` se existir. Edite `data_config.py` e rode `build_snapshot.py` para gerar o snapshot. |
-| `--output_dir` | `data_config.DEFAULT_ADAPTER_DIR` | **Pasta** onde serão salvos o adapter LoRA, checkpoints e o tokenizer (valor em [data_config.py](data_config.py)). |
+| `--model_name` | `data_config.DEFAULT_MODEL_NAME` | **ID do modelo** no Hugging Face Hub (definido em [data_config.py](trein/data_config.py)). O mesmo ID deve ser usado na inferência ([README_INFERIR.md](trein/README_INFERIR.md)) e no merge. Prefira variantes **Chat** ou **Instruct** para ter `apply_chat_template` correto. |
+| `--train_file` | (omitido) | **Caminho** do JSONL com a coluna `messages`. Se **omitido**: maior versão em `trein/data/snapshots/`, senão `trein/data/raw/exemplo/exemplo_treino.jsonl` se existir. Edite `trein/data_config.py` e rode `python trein/build_snapshot.py` para gerar o snapshot. |
+| `--output_dir` | `data_config.DEFAULT_ADAPTER_DIR` | **Pasta** onde serão salvos o adapter LoRA, checkpoints e o tokenizer (valor em [data_config.py](trein/data_config.py)). |
 | `--epochs` | `3.0` | Quantas **vezes** o algoritmo passa por todo o dataset de treino. Valores fracionários são permitidos (ex.: `0.5` = meia época). |
 | `--max_steps` | `-1` | Se for **maior que zero**, o treino **para após N atualizações** (passos), em vez de depender só de `--epochs`. Útil para **teste rápido** (`1` passo) ou para limitar tempo. Quando `> 0`, o Trainer do Hugging Face usa esse limite de passos. |
 | `--lr` | `2e-4` | **Taxa de aprendizado**: quão grandes são os ajustes nos pesos LoRA a cada passo. Muito alto pode destabilizar; muito baixo pode aprender devagar. `2e-4` é um ponto de partida comum para LoRA. |
@@ -185,7 +195,7 @@ Se você não passar outros argumentos, valem os **padrões** descritos na tabel
 **Ajuda no terminal:**
 
 ```bash
-python train_lora.py --help
+python trein/train_lora.py --help
 ```
 
 ### C.3 Configurações fixas no código (não são argumentos)
@@ -301,15 +311,15 @@ Ordens de grandeza da `loss` dependem do modelo e do dataset; o importante é a 
 **Só testar se a máquina aguenta (1 passo):**
 
 ```bash
-python train_lora.py --max_steps 1 --output_dir outputs/teste_instalacao --train_file data/exemplo_treino.jsonl
+python trein/train_lora.py --max_steps 1 --output_dir trein/outputs/teste_instalacao --train_file trein/data/raw/exemplo/exemplo_treino.jsonl
 ```
 
 **Treino mais longo com menos RAM por sequência:**
 
 ```bash
-python train_lora.py \
-  --train_file data/meu_dataset.jsonl \
-  --output_dir outputs/lora_adapter \
+python trein/train_lora.py \
+  --train_file trein/data/meu_dataset.jsonl \
+  --output_dir trein/outputs/lora_adapter \
   --epochs 5 \
   --max_seq_length 256 \
   --batch_size 1 \
@@ -320,10 +330,10 @@ python train_lora.py \
 **Outro modelo pequeno (pode exigir código confiável no Hub):**
 
 ```bash
-python train_lora.py \
+python trein/train_lora.py \
   --model_name "Qwen/Qwen2-0.5B-Instruct" \
   --trust_remote_code \
-  --train_file data/meu_dataset.jsonl
+  --train_file trein/data/meu_dataset.jsonl
 ```
 
 ### C.6 Arquivos gerados em `--output_dir`
@@ -342,10 +352,10 @@ O **modelo base** continua sendo baixado do Hub na inferência; você **não** d
 
 ## Parte D — Teste de inferência (`inferir.py`)
 
-Depois do treino, use **`inferir.py`** para carregar modelo base + adapter LoRA e gerar uma resposta no terminal. **Lógica interna, argumentos, parâmetros de geração e limitações:** [README_INFERIR.md](README_INFERIR.md).
+Depois do treino, use **`inferir.py`** para carregar modelo base + adapter LoRA e gerar uma resposta no terminal. **Lógica interna, argumentos, parâmetros de geração e limitações:** [README_INFERIR.md](trein/README_INFERIR.md).
 
 ```bash
-python inferir.py --adapter_dir outputs/lora_adapter --prompt "Sua pergunta aqui"
+python trein/inferir.py --adapter_dir trein/outputs/lora_adapter --prompt "Sua pergunta aqui"
 ```
 
 ---
@@ -356,7 +366,7 @@ python inferir.py --adapter_dir outputs/lora_adapter --prompt "Sua pergunta aqui
 
 Durante o treino, o LoRA fica em **arquivos pequenos** separados do modelo base. O **merge** usa o PEFT para **somar** essas atualizações aos pesos do base e produzir um **único** `AutoModelForCausalLM` “normal”, que você salva com `save_pretrained`.
 
-| Situação | Adapter separado (teste com [README_INFERIR.md](README_INFERIR.md)) | Modelo fundido (`merge_lora.py`) |
+| Situação | Adapter separado (teste com [README_INFERIR.md](trein/README_INFERIR.md)) | Modelo fundido (`merge_lora.py`) |
 |----------|----------------------------------|----------------------------------|
 | Tamanho em disco (exemplo TinyLlama) | Poucos MB na pasta do adapter + ~2,2 GB **só no cache** do Hub | ~2,2 GB **na pasta** `--output_dir` do merge (cópia completa) |
 | Carregar na inferência | Base + `PeftModel.from_pretrained` | Só `from_pretrained` na pasta fundida |
@@ -369,10 +379,10 @@ Durante o treino, o LoRA fica em **arquivos pequenos** separados do modelo base.
 ### E.2 Comando
 
 ```bash
-python merge_lora.py \
+python trein/merge_lora.py \
   --model_name "TinyLlama/TinyLlama-1.1B-Chat-v1.0" \
-  --adapter_dir outputs/lora_adapter \
-  --output_dir outputs/merged_model
+  --adapter_dir trein/outputs/lora_adapter \
+  --output_dir trein/outputs/merged_model
 ```
 
 ### E.3 Argumentos
@@ -380,8 +390,8 @@ python merge_lora.py \
 | Argumento | Padrão | O que faz |
 |-----------|--------|-----------|
 | `--model_name` | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | **Mesmo** ID do modelo base usado no treino. O merge baixa/carrega esses pesos do Hub (ou do cache). |
-| `--adapter_dir` | `outputs/lora_adapter` | Pasta com `adapter_config.json` + pesos LoRA (saída do `train_lora.py`). |
-| `--output_dir` | `outputs/merged_model` | Onde gravar o modelo causal **fundido** + tokenizer. |
+| `--adapter_dir` | `trein/outputs/lora_adapter` | Pasta com `adapter_config.json` + pesos LoRA (saída do `train_lora.py`). |
+| `--output_dir` | `trein/outputs/merged_model` | Onde gravar o modelo causal **fundido** + tokenizer. |
 | `--trust_remote_code` | (desligado) | Igual aos outros scripts, se o modelo base exigir. |
 
 O tokenizer é lido da pasta do adapter se existir `tokenizer_config.json`; senão, usa o do `--model_name`.
@@ -394,7 +404,7 @@ Para gerar texto com o modelo fundido em Python (sem PEFT):
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
-path = "outputs/merged_model"
+path = "trein/outputs/merged_model"
 tok = AutoTokenizer.from_pretrained(path)
 model = AutoModelForCausalLM.from_pretrained(path, dtype=torch.float32)  # ou bf16/fp16 com GPU
 # ... apply_chat_template + generate (lógica semelhante ao README_INFERIR.md) ...
@@ -406,13 +416,13 @@ model = AutoModelForCausalLM.from_pretrained(path, dtype=torch.float32)  # ou bf
 
 | Ordem | Ação |
 |-------|------|
-| 1 | Ativar `.venv` e instalar `requirements.txt`. |
-| 2 | Rodar `python verificar_ambiente.py`. |
-| 3 | Colocar `.jsonl` em `data/raw/` (por tema) e rodar `python build_snapshot.py` para gerar `data/snapshots/train_*_v*.jsonl` (ou usar `data/exemplo_treino.jsonl` só para teste). |
-| 4 | Rodar `train_lora.py --max_steps 1` para validar (sem `--train_file` usa o snapshot de maior versão). |
+| 1 | Ativar `.venv` e instalar `trein/requirements.txt` (ou `requirements.txt` na raiz para treino+servidor). |
+| 2 | Rodar `python trein/verificar_ambiente.py`. |
+| 3 | Colocar `.jsonl` em `trein/data/raw/` (por tema) e rodar `python trein/build_snapshot.py` para gerar `trein/data/snapshots/train_*_v*.jsonl` (ou usar `trein/data/raw/exemplo/exemplo_treino.jsonl` só para teste). |
+| 4 | Rodar `python trein/train_lora.py --max_steps 1` para validar (sem `--train_file` usa o snapshot de maior versão). |
 | 5 | Rodar treino real com `--epochs` / `--max_seq_length` desejados. |
-| 6 | Testar inferência: [README_INFERIR.md](README_INFERIR.md) — `inferir.py` com o mesmo `--model_name` do treino. |
-| 7 | (Opcional) Fundir base + adapter: `python merge_lora.py --adapter_dir outputs/lora_adapter --output_dir outputs/merged_model` (Parte E). |
+| 6 | Testar inferência: [README_INFERIR.md](trein/README_INFERIR.md) — `inferir.py` com o mesmo `--model_name` do treino. |
+| 7 | (Opcional) Fundir base + adapter: `python trein/merge_lora.py --adapter_dir trein/outputs/lora_adapter --output_dir trein/outputs/merged_model` (Parte E). |
 | 8 | (Opcional) Ver onde o modelo base foi cacheado: Parte H — `hf cache scan` ou `ls ~/.cache/huggingface/hub/`. |
 
 ---
@@ -423,11 +433,11 @@ model = AutoModelForCausalLM.from_pretrained(path, dtype=torch.float32)  # ou bf
 |---------|----------------|
 | Erro de memória (RAM) | Reduzir `--max_seq_length`; manter `--batch_size 1`; não usar `--no_gradient_checkpointing`. |
 | Treino muito lento | Esperado em **CPU**; reduzir dados, épocas ou `max_steps` para experimentos. |
-| Respostas ruins | Mais exemplos de qualidade no JSONL; ajustar `--epochs`, `--lr`, `--lora_r`; na inferência de teste, o mesmo `model_name` do treino ([README_INFERIR.md](README_INFERIR.md)). |
+| Respostas ruins | Mais exemplos de qualidade no JSONL; ajustar `--epochs`, `--lr`, `--lora_r`; na inferência de teste, o mesmo `model_name` do treino ([README_INFERIR.md](trein/README_INFERIR.md)). |
 | `trust_remote_code` pedido | Adicionar `--trust_remote_code` no treino, na inferência e no `merge_lora.py` para aquele modelo. |
 | Erro de memória no **merge** | O `merge_lora.py` carrega o modelo base inteiro; feche outros programas, use GPU se disponível, ou funda em máquina com mais RAM. |
-| `ValueError: Unrecognized configuration class ... JanusConfig` for `AutoModelForCausalLM` | O modelo no Hub **não** é um causal LM “só texto” compatível com esta pipeline (ex.: **Janus** é multimodal). Escolha outro ID em [huggingface.co/models](https://huggingface.co/models) (filtro *Text Generation* / variantes **Chat** ou **Instruct**) e atualize `DEFAULT_MODEL_NAME` em [data_config.py](data_config.py) ou passe `--model_name`. |
-| `ImportError: Loading an AWQ quantized model requires gptqmodel` | Checkpoints **AWQ** precisam de `pip install -r requirements-quantized.txt` (ver [requirements-quantized.txt](requirements-quantized.txt)). **Contexto:** o que são pesos quantizados e quando usar cada `requirements` — **§A.3.1**. **Alternativa:** modelo **sem** quantização (ex.: `deepseek-ai/deepseek-coder-1.3b-instruct`) e só o [requirements.txt](requirements.txt). |
+| `ValueError: Unrecognized configuration class ... JanusConfig` for `AutoModelForCausalLM` | O modelo no Hub **não** é um causal LM “só texto” compatível com esta pipeline (ex.: **Janus** é multimodal). Escolha outro ID em [huggingface.co/models](https://huggingface.co/models) (filtro *Text Generation* / variantes **Chat** ou **Instruct**) e atualize `DEFAULT_MODEL_NAME` em [data_config.py](trein/data_config.py) ou passe `--model_name`. |
+| `ImportError: Loading an AWQ quantized model requires gptqmodel` | Checkpoints **AWQ** precisam de `pip install -r trein/requirements-quantized.txt` (ver [trein/requirements-quantized.txt](trein/requirements-quantized.txt)). **Contexto:** o que são pesos quantizados e quando usar cada `requirements` — **§A.3.1**. **Alternativa:** modelo **sem** quantização (ex.: `deepseek-ai/deepseek-coder-1.3b-instruct`) e só o [trein/requirements.txt](trein/requirements.txt). |
 
 ---
 
@@ -439,8 +449,8 @@ Esta seção responde: **onde o modelo original (base) fica salvo** no computado
 
 | O quê | Onde fica |
 |-------|-----------|
-| **Pesos do modelo base** (ex.: TinyLlama baixado do Hub) | **Cache global** do Hugging Face — em Linux, em geral `~/.cache/huggingface/hub/`. **Não** fica dentro da pasta `outputs/` do projeto. |
-| **Adapter LoRA** e cópia do tokenizer do seu treino | Pasta `--output_dir` (ex.: `outputs/lora_adapter`). |
+| **Pesos do modelo base** (ex.: TinyLlama baixado do Hub) | **Cache global** do Hugging Face — em Linux, em geral `~/.cache/huggingface/hub/`. **Não** fica dentro da pasta `trein/outputs/` do projeto. |
+| **Adapter LoRA** e cópia do tokenizer do seu treino | Pasta `--output_dir` (ex.: `trein/outputs/lora_adapter`). |
 
 Na primeira vez que você roda `train_lora.py`, `inferir.py` ou `merge_lora.py`, a biblioteca **baixa** (ou reutiliza) o modelo base nesse cache. O treino **não** grava uma segunda cópia completa do modelo base na pasta do adapter — só o LoRA. O **merge** grava uma cópia **completa** fundida em `--output_dir` do `merge_lora.py` (Parte E).
 

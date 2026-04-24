@@ -10,7 +10,7 @@ def main() -> None:
     try:
         import torch
     except ImportError:
-        print("PyTorch não está instalado. Ative o venv e rode: pip install -r requirements.txt")
+        print("PyTorch não está instalado. Ative o venv e rode: pip install -r trein/requirements.txt")
         sys.exit(1)
 
     print("Python:", sys.version.split()[0])

@@ -21,6 +21,10 @@ import os
 import sys
 from pathlib import Path
 
+_TREIN = Path(__file__).resolve().parent
+if str(_TREIN) not in sys.path:
+    sys.path.insert(0, str(_TREIN))
+
 # O pacote opcional `gptqmodel` (GPT-QModel), se instalado, ao importar ajusta
 # PYTORCH_ALLOC_CONF e mostra o banner com versões. Este script não usa GPTQ.
 # Definir aqui evita que o gptqmodel sobrescreva o allocator (comportamento mais estável).
@@ -98,7 +102,7 @@ def parse_args() -> argparse.Namespace:
         "--train_file",
         type=Path,
         default=None,
-        help="JSONL com 'messages'. Se omitido: maior versão em data/snapshots/ (train_*_v*.jsonl), senão data/exemplo_treino.jsonl. Edite data_config.py (versão/prefixo) e rode build_snapshot.py.",
+        help="JSONL com 'messages'. Se omitido: maior versão em trein/data/snapshots/ (train_*_v*.jsonl), senão trein/data/raw/exemplo/exemplo_treino.jsonl. Edite trein/data_config.py (versão/prefixo) e rode python trein/build_snapshot.py.",
     )
     p.add_argument(
         "--output_dir",

@@ -36,7 +36,7 @@ Tudo roda sob `torch.no_grad()` (inferência, sem treino).
   ```bash
   cd "/PROJETO/ORÁCULO SANTUÁRIO DIGITAL/TREINAMENTO LLM"
   source .venv/bin/activate
-  pip install -r requirements.txt
+  pip install -r trein/requirements.txt
   python inferir.py --prompt "O que é um oráculo digital?"
   ```
   ou
@@ -44,7 +44,7 @@ Tudo roda sob `torch.no_grad()` (inferência, sem treino).
   ```bash
   python3 -m venv .venv   # só se ainda não existir
   source .venv/bin/activate
-  pip install -r requirements.txt
+  pip install -r trein/requirements.txt
   ```
 
   Sem ativar o venv, chame o script assim:
@@ -103,7 +103,7 @@ python inferir.py --prompt "O que é um oráculo digital?"
 ```bash
 python inferir.py \
   --model_name "TinyLlama/TinyLlama-1.1B-Chat-v1.0" \
-  --adapter_dir outputs/lora_adapter \
+  --adapter_dir trein/outputs/lora_adapter \
   --prompt "Sua pergunta aqui" \
   --max_new_tokens 128
 ```

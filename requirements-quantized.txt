@@ -1,8 +1,0 @@
-# Extra para checkpoints AWQ/GPTQ (ex.: TheBloke/deepseek-coder-1.3b-instruct-AWQ)
-# O transformers pede gptqmodel ao carregar; o PEFT/LoRA pede optimum >= 1.24.
-# Instale depois do requirements.txt:
-#   pip install -r requirements.txt
-#   pip install -r requirements-quantized.txt
-
-gptqmodel>=5.0.0
-optimum>=1.24.0

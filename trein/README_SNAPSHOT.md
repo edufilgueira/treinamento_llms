@@ -1,6 +1,6 @@
 # Lógica do snapshot de treino
 
-Este documento explica **só** o fluxo entre `data/raw/`, `build_snapshot.py`, `data/snapshots/` e `train_lora.py`. Para estrutura de pastas e curadoria de dados, veja [README_DATASETS.md](README_DATASETS.md). Para a pipeline completa de LoRA, veja [README.md](README.md).
+Este documento explica **só** o fluxo entre `data/raw/`, `build_snapshot.py`, `data/snapshots/` e `train_lora.py` (tudo sob a pasta `trein/`). Para estrutura de pastas e curadoria de dados, veja [README_DATASETS.md](README_DATASETS.md). Para a pipeline completa de LoRA, veja [README.md](../README.md).
 
 ---
 

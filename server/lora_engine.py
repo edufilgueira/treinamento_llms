@@ -1,6 +1,6 @@
 """
 Motor de inferência partilhado: base Hugging Face + adapter LoRA (ou pasta modelo fundido).
-Usado por inferir.py e server/serve_lora.py.
+Usado por trein/inferir.py e server/serve_lora.py.
 """
 
 from __future__ import annotations

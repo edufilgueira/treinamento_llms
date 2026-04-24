@@ -2,7 +2,7 @@
 """
 Servidor local (FastAPI): carrega base + LoRA **uma vez** e serve chat por HTTP.
 
-Evita repetir o custo de carregar vários GB em cada execução de inferir.py.
+Evita repetir o custo de carregar vários GB em cada execução de trein/inferir.py.
 
   cd <raiz do projeto> && python3 server/serve_lora.py
   # ou: ./server/serve.sh
@@ -30,10 +30,10 @@ from typing import Annotated, Any
 
 _SERVER_DIR = Path(__file__).resolve().parent
 _PROJECT_ROOT = _SERVER_DIR.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
-if str(_SERVER_DIR) not in sys.path:
-    sys.path.insert(0, str(_SERVER_DIR))
+_TREIN_DIR = _PROJECT_ROOT / "trein"
+for _p in (_TREIN_DIR, _SERVER_DIR):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 
 def _load_dotenv_early() -> None:

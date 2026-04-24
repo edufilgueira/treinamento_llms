@@ -7,7 +7,13 @@ Usa GPU (CUDA) se disponível, senão CPU.
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
+
+_REPO = Path(__file__).resolve().parent.parent
+for _p in (_REPO / "trein", _REPO / "server"):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 from data_config import (
     DEFAULT_ADAPTER_DIR,

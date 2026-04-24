@@ -1,0 +1,28 @@
+ssh root@187.77.44.167
+
+
+scp lora_adapter.zip  root@187.77.44.167:/root/treinamento_llms/trein/outputs
+
+
+segundo plano
+nohup ./serve.sh > app.log 2>&1 &
+
+
+ps aux | grep python
+
+
+tail -f ~/treinamento_llms/server/app.log
+
+
+ORACULO_PG_HOST=127.0.0.1
+ORACULO_PG_PORT=5432
+ORACULO_PG_USER=postgres
+ORACULO_PG_PASSWORD=Pas101010&du1
+ORACULO_PG_DATABASE=oraculo
+ORACULO_PG_SSLMODE=prefer
+
+
+modelo quantizado (compactado)
+lhama cpp 
+
+

@@ -1,0 +1,17 @@
+# Oráculo: API (FastAPI), autenticação, PostgreSQL, UI estática, inferência (lora_engine).
+# Não inclui trl/datasets (só o treino usa). Instale com: pip install -r server/requirements.txt
+
+torch>=2.1.0
+transformers>=4.40.0
+accelerate>=0.28.0
+peft>=0.11.0
+sentencepiece>=0.2.0
+tiktoken>=0.7.0
+protobuf>=4.25.0
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+itsdangerous>=2.0.0
+bcrypt>=4.0.0
+psycopg2-binary>=2.9.9
+python-dotenv>=1.0.0

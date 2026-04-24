@@ -1,6 +1,6 @@
 # Organização de datasets para treino (LoRA)
 
-Este documento resume **como organizar** muitas fontes de dados (conversas, livros, Bíblia, psicologia, sintéticos, etc.) de forma sustentável à medida que o volume **cresce**. Complementa o [README.md](README.md) principal, que foca na pipeline técnica (`train_lora.py`).
+Este documento resume **como organizar** muitas fontes de dados (conversas, livros, Bíblia, psicologia, sintéticos, etc.) de forma sustentável à medida que o volume **cresce**. Complementa o [README.md](../README.md) principal, que foca na pipeline técnica (`train_lora.py`).
 
 ---
 
@@ -66,7 +66,7 @@ python train_lora.py   # usa o snapshot mais recente por versão
 
 ## 3. Formato das linhas
 
-O treino atual espera **JSONL** com a coluna **`messages`** (lista de `role` / `content`). Veja o [README.md](README.md), Parte B.
+O treino atual espera **JSONL** com a coluna **`messages`** (lista de `role` / `content`). Veja o [README.md](../README.md), Parte B.
 
 Para organização futura, você pode **guardar mais campos** nos arquivos em `raw/` (o pipeline pode ignorar colunas extras se você gerar um snapshot só com `messages`):
 
@@ -197,4 +197,4 @@ Ou seja: quem “sorteia” por você no treino é **`True`**, não `False`. `Fa
 - **[README_SNAPSHOT.md](README_SNAPSHOT.md)** — explica passo a passo a lógica do snapshot, versões e escolha automática no treino.
 - **`build_snapshot.py`** — unifica `data/raw/**/*.jsonl` → `data/snapshots/train_<prefixo>_<versão>.jsonl` (ver `data_config.py`).
 - **`train_lora.py`** — sem `--train_file`, usa o snapshot de **maior versão** em `data/snapshots/`; com `--train_file caminho.jsonl`, força um ficheiro concreto.
-- O [README.md](README.md) descreve instalação, hiperparâmetros, inferência, merge e cache.
+- O [README.md](../README.md) descreve instalação, hiperparâmetros, inferência, merge e cache.
