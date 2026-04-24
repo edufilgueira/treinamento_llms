@@ -699,6 +699,75 @@
   const CHECK_ICON_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
 
+  const MSG_STAT_SVG_TOKENS =
+    '<svg class="msg__stat-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="4" ry="2"/><path d="M8 5v4c0 1.1 1.8 2 4 2s4-.9 4-2V5"/><path d="M8 9v4c0 1.1 1.8 2 4 2s4-.9 4-2V9"/><path d="M8 13v3c0 1.1 1.8 2 4 2s4-.9 4-2v-3"/></svg>';
+
+  const MSG_STAT_SVG_CLOCK =
+    '<svg class="msg__stat-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
+
+  const MSG_STAT_SVG_TPS =
+    '<svg class="msg__stat-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"/><path d="M6 20a8 6 0 0 1 12 0"/><path d="M12 10V6"/><path d="M12 10l3 2"/></svg>';
+
+  function formatGenSec(s) {
+    if (s == null || !Number.isFinite(Number(s)) || Number(s) < 0) {
+      return "—";
+    }
+    const n = Number(s);
+    return n.toFixed(1).replace(/\.0$/, "") + "s";
+  }
+
+  function createAssistantStatsEl() {
+    const root = document.createElement("div");
+    root.className = "msg__stats msg__stats--empty";
+    root.setAttribute("aria-hidden", "true");
+    function line(icon, key) {
+      const span = document.createElement("span");
+      span.className = "msg__stat";
+      const holder = document.createElement("div");
+      holder.innerHTML = icon;
+      const val = document.createElement("span");
+      val.className = "msg__stat-val";
+      val.dataset.m = key;
+      span.appendChild(holder.firstElementChild);
+      span.appendChild(val);
+      return span;
+    }
+    root.appendChild(line(MSG_STAT_SVG_TOKENS, "tok"));
+    root.appendChild(line(MSG_STAT_SVG_CLOCK, "sec"));
+    root.appendChild(line(MSG_STAT_SVG_TPS, "tps"));
+    return root;
+  }
+
+  function setAssistantGenStats(root, st) {
+    if (!root) return;
+    if (!st) return;
+    const has =
+      (st.output_tokens != null && st.output_tokens !== undefined) ||
+      (st.gen_seconds != null && st.gen_seconds !== undefined) ||
+      (st.tokens_per_sec != null && st.tokens_per_sec !== undefined);
+    if (!has) return;
+    root.classList.remove("msg__stats--empty");
+    root.setAttribute("aria-hidden", "false");
+    const tok = root.querySelector('.msg__stat-val[data-m="tok"]');
+    const sec = root.querySelector('.msg__stat-val[data-m="sec"]');
+    const tps = root.querySelector('.msg__stat-val[data-m="tps"]');
+    if (st.output_tokens != null && st.output_tokens !== undefined) {
+      if (tok) tok.textContent = String(st.output_tokens) + " tokens";
+    } else if (tok) {
+      tok.textContent = "—";
+    }
+    if (st.gen_seconds != null && st.gen_seconds !== undefined) {
+      if (sec) sec.textContent = formatGenSec(Number(st.gen_seconds));
+    } else if (sec) {
+      sec.textContent = "—";
+    }
+    if (st.tokens_per_sec != null && st.tokens_per_sec !== undefined) {
+      if (tps) tps.textContent = Number(st.tokens_per_sec).toFixed(2) + " t/s";
+    } else if (tps) {
+      tps.textContent = "—";
+    }
+  }
+
   function copyTextToClipboard(text) {
     if (typeof navigator !== "undefined" && navigator.clipboard && window.isSecureContext) {
       return navigator.clipboard.writeText(text).catch(() => copyTextViaExecCommand(text));
@@ -776,7 +845,15 @@
     bindCopyButton(copyBtn, () => getMsgCopyText(textEl), stack);
     bubble.appendChild(textEl);
     stack.appendChild(bubble);
-    stack.appendChild(copyBtn);
+    if (role === "assistant") {
+      const bar = document.createElement("div");
+      bar.className = "msg-stack__bar";
+      bar.appendChild(copyBtn);
+      bar.appendChild(createAssistantStatsEl());
+      stack.appendChild(bar);
+    } else {
+      stack.appendChild(copyBtn);
+    }
     logInner.appendChild(stack);
     updateEmptyState();
     scrollLog();
@@ -791,13 +868,18 @@
     textEl.className = "msg__text";
     const copyBtn = document.createElement("button");
     bindCopyButton(copyBtn, () => getMsgCopyText(textEl), stack);
+    const statsEl = createAssistantStatsEl();
+    const bar = document.createElement("div");
+    bar.className = "msg-stack__bar";
+    bar.appendChild(copyBtn);
+    bar.appendChild(statsEl);
     bubble.appendChild(textEl);
     stack.appendChild(bubble);
-    stack.appendChild(copyBtn);
+    stack.appendChild(bar);
     logInner.appendChild(stack);
     updateEmptyState();
     scrollLog();
-    return { div: bubble, textEl };
+    return { div: bubble, textEl, statsEl };
   }
 
   function clearChat() {
@@ -1227,9 +1309,10 @@
     sendBtn.dataset.busy = "1";
     updateSendState();
 
-    const { div: assistantDiv, textEl } = appendAssistantStreaming();
+    const { div: assistantDiv, textEl, statsEl } = appendAssistantStreaming();
     let lastText = "";
     let endReason = "none";
+    let lastJobState = null;
 
     try {
       const createRes = await apiFetch("/api/chat/jobs", {
@@ -1284,6 +1367,7 @@
         scrollLogIfFollowing();
         if (st.status === "done") {
           endReason = "done";
+          lastJobState = st;
           break;
         }
         if (st.status === "error") {
@@ -1291,6 +1375,7 @@
         }
         if (st.status === "cancelled") {
           endReason = "cancelled";
+          lastJobState = st;
           break;
         }
         await sleepPoll(JOB_POLL_MS, signal);
@@ -1326,6 +1411,9 @@
         }
       }
       assistantDiv.classList.remove("streaming");
+      if (statsEl && lastJobState && logInner && logInner.contains(statsEl)) {
+        setAssistantGenStats(statsEl, lastJobState);
+      }
       currentJobId = null;
       releaseScreenWakeLock();
       if (streamAborter === ac) {

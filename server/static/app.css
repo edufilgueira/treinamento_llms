@@ -548,20 +548,25 @@ body.menu-open {
   color: #7dce9a;
 }
 
-/* Menu mobile ecrã inteiro */
-
+/* Menu mobile ecrã inteiro — slide painel da esquerda p/ a vista; ao fechar, desliza p/ a esq. (direita→esq. no ecrã). */
 .mobile-menu {
+  --mm-slide-duration: 0.4s;
+  --mm-slide-ease: cubic-bezier(0.26, 0.82, 0.32, 0.98);
   display: none;
   position: fixed;
   inset: 0;
   z-index: 3000;
   pointer-events: none;
+  /* Fecho: atrasar visibility para o painel concluir o transform; senão o menu corta a animação. */
   visibility: hidden;
+  transition: visibility 0s linear var(--mm-slide-duration);
 }
 
 .mobile-menu.is-open {
   pointer-events: auto;
   visibility: visible;
+  /* Abrir: o painel fica imediatamente desenhado por baixo. */
+  transition: visibility 0s;
 }
 
 .mobile-menu__panel {
@@ -574,9 +579,10 @@ body.menu-open {
   padding: max(env(safe-area-inset-top), 12px) 1rem 1rem;
   padding-bottom: max(env(safe-area-inset-bottom), 1rem);
   transform: translateX(-100%);
-  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  transition: transform var(--mm-slide-duration) var(--mm-slide-ease);
   will-change: transform;
   touch-action: pan-y;
+  backface-visibility: hidden;
 }
 
 .mobile-menu.is-open .mobile-menu__panel {
@@ -892,6 +898,52 @@ body.menu-open {
   min-height: 1.5em;
 }
 
+/* Barra sob a resposta: copiar (esq.) e métricas (dir.). */
+.msg-stack__bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+  gap: 0.5rem 0.75rem;
+}
+
+.msg__stats {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  line-height: 1.2;
+  margin: 0;
+  margin-left: auto;
+  letter-spacing: 0.01em;
+}
+
+.msg__stats--empty {
+  display: none;
+}
+
+.msg__stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  white-space: nowrap;
+}
+
+.msg__stat-ico {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.9;
+  color: var(--text-secondary);
+}
+
 .msg__copy {
   position: relative;
   flex-shrink: 0;
@@ -902,21 +954,21 @@ body.menu-open {
   height: 2rem;
   padding: 0;
   margin: 0;
-  border: 1px solid var(--border-subtle);
-  border-radius: 0.5rem;
-  background: rgba(255, 255, 255, 0.06);
+  border: none;
+  border-radius: 0.35rem;
+  background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease,
-    color 0.12s ease;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
 
 .msg__copy::before {
   content: attr(data-tooltip);
   position: absolute;
-  bottom: calc(100% + 8px);
+  top: calc(100% + 8px);
+  bottom: auto;
   left: 50%;
   transform: translateX(-50%);
   padding: 0.35rem 0.55rem;
@@ -927,7 +979,7 @@ body.menu-open {
   white-space: nowrap;
   color: var(--text);
   background: rgba(22, 22, 28, 0.96);
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: 0.4rem;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
   opacity: 0;
@@ -951,12 +1003,17 @@ body.menu-open {
   flex-shrink: 0;
 }
 
-.msg__copy:hover,
-.msg__copy:focus-visible {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.14);
+/* Hover: só o ícone muda; sem “caixa”/borda (o fundo parecia a moldura do botão antigo). */
+.msg__copy:hover {
+  background: transparent;
   color: var(--text);
-  outline: none;
+}
+
+.msg__copy:focus-visible {
+  background: transparent;
+  color: var(--text);
+  outline: 2px solid rgba(255, 255, 255, 0.25);
+  outline-offset: 2px;
 }
 
 .msg-stack:hover .msg__copy,
@@ -980,6 +1037,11 @@ body.menu-open {
 
   .msg__copy::before {
     content: none;
+  }
+
+  .msg__stats {
+    font-size: 0.7rem;
+    gap: 0.4rem 0.6rem;
   }
 }
 

@@ -19,6 +19,7 @@ import argparse
 import asyncio
 import json
 import os
+import time
 import re
 import secrets
 import sys
@@ -272,6 +273,9 @@ class JobStateOut(BaseModel):
     status: str
     text: str
     error: str | None = None
+    output_tokens: int | None = None
+    gen_seconds: float | None = None
+    tokens_per_sec: float | None = None
 
 
 class SessionTitleUpdate(BaseModel):
@@ -653,7 +657,10 @@ def _job_worker(
     tokenizer = _engine["tokenizer"]
     model = _engine["model"]
     try:
+        t0: float
+        t1: float
         with _gen_lock:
+            t0 = time.perf_counter()
             for delta in generate_chat_reply_stream(
                 tokenizer,
                 model,
@@ -667,10 +674,22 @@ def _job_worker(
                     if job_id not in _jobs:
                         return
                     _jobs[job_id]["text"] += delta
+            t1 = time.perf_counter()
         with _jobs_lock:
             if job_id not in _jobs:
                 return
             j = _jobs[job_id]
+            asst_full = j.get("text") or ""
+            gen_sec = max(float(t1 - t0), 1e-9)
+            if asst_full.strip():
+                toks = len(
+                    tokenizer.encode(str(asst_full), add_special_tokens=False)  # type: ignore[union-attr]
+                )
+            else:
+                toks = 0
+            j["output_tokens"] = toks
+            j["gen_seconds"] = round(float(t1 - t0), 2)
+            j["tokens_per_sec"] = round(toks / gen_sec, 2) if toks else 0.0
             if j["cancel_event"].is_set():
                 j["status"] = "cancelled"
             else:
@@ -952,6 +971,9 @@ async def get_chat_job(_uid: UserIdDep, job_id: str):
         status=j["status"],
         text=j.get("text", ""),
         error=j.get("error"),
+        output_tokens=j.get("output_tokens"),
+        gen_seconds=j.get("gen_seconds"),
+        tokens_per_sec=j.get("tokens_per_sec"),
     )
 
 
