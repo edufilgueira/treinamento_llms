@@ -164,7 +164,8 @@ def _parse_args() -> argparse.Namespace:
         "--adapter_dir",
         type=Path,
         default=DEFAULT_ADAPTER_DIR,
-        help="Pasta do adapter (train_lora.py). Ignorado se --merged_model_dir válido.",
+        help="Pasta do adapter (train_lora.py); padrão: trein/outputs/lora_adapter na raiz do repo. "
+        "Ignorado se --merged_model_dir válido. ORACULO_ADAPTER_DIR no .env sobrepõe.",
     )
     p.add_argument(
         "--merged_model_dir",
@@ -183,6 +184,12 @@ def _parse_args() -> argparse.Namespace:
     v = os.environ.get("ORACULO_UI_ONLY", "").strip().lower()
     if v in ("1", "true", "yes", "on"):
         args.ui_only = True
+    ad_env = os.environ.get("ORACULO_ADAPTER_DIR", "").strip()
+    if ad_env:
+        args.adapter_dir = Path(ad_env).expanduser()
+    args.adapter_dir = args.adapter_dir.resolve()
+    if args.merged_model_dir is not None:
+        args.merged_model_dir = Path(args.merged_model_dir).expanduser().resolve()
     return args
 
 

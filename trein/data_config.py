@@ -67,9 +67,9 @@ ROOT = TREIN_ROOT
 # confortável — train_lora avisa neste caso; TinyLlama é alternativa para CPUs mais limitadas.
 DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-3B-Instruct"
 
-# --- Pastas de saída (relativas à raiz do repo; independentes do cwd) ---
-DEFAULT_ADAPTER_DIR = ROOT / "outputs" / "lora_adapter"
-DEFAULT_MERGED_MODEL_DIR = ROOT / "outputs" / "merged_model"
+# --- Pastas de saída do LoRA / merge: sempre trein/outputs/... na raiz do repositório ---
+DEFAULT_ADAPTER_DIR = REPO_ROOT / "trein" / "outputs" / "lora_adapter"
+DEFAULT_MERGED_MODEL_DIR = REPO_ROOT / "trein" / "outputs" / "merged_model"
 
 # Versão do snapshot: "v1", "v2", ... (aparece no nome do ficheiro)
 DATASET_VERSION = "v1"

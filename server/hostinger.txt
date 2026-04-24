@@ -3,6 +3,8 @@ ssh root@187.77.44.167
 
 scp lora_adapter.zip  root@187.77.44.167:/root/treinamento_llms/trein/outputs
 
+scp root@187.77.44.167:/root/treinamento_llms/trein/outputs/lora_adapter.zip "C:\Users\Eduardo Filgueira\Downloads"
+
 
 segundo plano
 nohup ./serve.sh > app.log 2>&1 &
