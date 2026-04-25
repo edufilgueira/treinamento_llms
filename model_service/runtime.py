@@ -90,7 +90,7 @@ class ModelRuntime:
         self._tokenizer = tokenizer
         self._model = model
         self._mode = "fundido" if merged_used is not None else "base+LoRA"
-        self._model_id = model_name
+        self._model_id = str(merged_used.resolve()) if merged_used is not None else model_name
 
     def clear(self) -> None:
         self._tokenizer = None

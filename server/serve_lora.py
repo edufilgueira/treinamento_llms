@@ -196,6 +196,11 @@ def _model_unavailable_detail() -> str:
 def _resolve_merged_path(cli_path: Path | None) -> Path | None:
     if cli_path is not None:
         return cli_path
+    env_m = (os.environ.get("ORACULO_MERGED_MODEL_DIR") or "").strip()
+    if env_m:
+        p = Path(env_m).expanduser().resolve()
+        if p.is_dir() and (p / "config.json").is_file():
+            return p
     if DEFAULT_MERGED_MODEL_DIR.is_dir() and (DEFAULT_MERGED_MODEL_DIR / "config.json").is_file():
         return DEFAULT_MERGED_MODEL_DIR
     return None

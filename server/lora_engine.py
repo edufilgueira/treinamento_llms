@@ -5,6 +5,7 @@ Usado por trein/inferir.py e server/serve_lora.py.
 
 from __future__ import annotations
 
+import os
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -30,6 +31,76 @@ class _CancelStoppingCriteria(StoppingCriteria):
 
     def __call__(self, input_ids, scores, **kwargs) -> bool:
         return self.cancel_event.is_set()
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    v = (os.environ.get(name) or "").strip().lower()
+    if not v:
+        return default
+    return v in ("1", "true", "yes", "on")
+
+
+def _attn_implementation() -> str | None:
+    """sdpa = PyTorch SDPA (rápido, sem deps extra); eager = compatível. flash_attention_2 requer o pacote."""
+    raw = (os.environ.get("ORACULO_ATTN_IMPLEMENTATION") or "").strip()
+    if raw:
+        return raw
+    if torch.cuda.is_available():
+        return "sdpa"
+    return "eager"
+
+
+def _apply_cuda_runtime_prefs() -> None:
+    if not torch.cuda.is_available():
+        return
+    # TF32 em matmuls float32 (alguns módulos internos) — ligeiro ganho em A4500/Ampera+
+    prec = (os.environ.get("ORACULO_MATMUL_PRECISION") or "high").strip().lower()
+    if prec in ("high", "highest", "medium"):
+        try:
+            torch.set_float32_matmul_precision(prec)  # type: ignore[arg-type]
+        except Exception:
+            pass
+    if _env_flag("ORACULO_CUDNN_BENCHMARK", False):
+        torch.backends.cudnn.benchmark = True  # type: ignore[union-attr]
+
+
+def _maybe_compile_model(model: torch.nn.Module) -> torch.nn.Module:
+    if not _env_flag("ORACULO_TORCH_COMPILE", False):
+        return model
+    mode = (os.environ.get("ORACULO_TORCH_COMPILE_MODE") or "reduce-overhead").strip()
+    try:
+        out = torch.compile(model, mode=mode)  # type: ignore[assignment, misc]
+    except Exception as e:
+        print(
+            f"Aviso: ORACULO_TORCH_COMPILE=1 mas torch.compile falhou ({e!s}); a usar modelo normal.",
+            file=sys.stderr,
+            flush=True,
+        )
+        return model
+    print(
+        "torch.compile activo (1.ª geração pode ser mais lenta). ORACULO_TORCH_COMPILE=0 para desligar.",
+        file=sys.stderr,
+        flush=True,
+    )
+    return out
+
+
+def _forward_warmup(
+    tokenizer: AutoTokenizer, model: torch.nn.Module, skip_if_no_cuda: bool = False
+) -> None:
+    """Um forward curto para aquecer CUDA/cuDNN (e o grafo de compile, se houver)."""
+    if skip_if_no_cuda and not torch.cuda.is_available():
+        return
+    if not _env_flag("ORACULO_TORCH_WARMUP", True):
+        return
+    try:
+        device = next(model.parameters()).device
+        with torch.inference_mode():
+            t = tokenizer(" ", return_tensors="pt", add_special_tokens=True)
+            ids = t["input_ids"].to(device)
+            model(ids)
+    except Exception as e:
+        print(f"Aviso: warmup (forward) ignorado: {e!s}", file=sys.stderr, flush=True)
 
 
 def hf_local_dir_has_model_weights(path: Path) -> bool:
@@ -68,7 +139,11 @@ def load_lora_pipeline(
     - Senão: base ``model_name`` + ``PeftModel`` em ``adapter_dir``.
 
     O terceiro valor devolvido é o caminho do merge **efetivamente** usado, ou ``None`` se carregou base+adapter.
+
+    **Performance (GPU):** `ORACULO_ATTN_IMPLEMENTATION` (padrão ``sdpa``), matmul `ORACULO_MATMUL_PRECISION`,
+    opcional `ORACULO_TORCH_COMPILE=1` e `ORACULO_CUDNN_BENCHMARK=1` — ver comentário em `server/.env.example`.
     """
+    _apply_cuda_runtime_prefs()
     use_cuda = torch.cuda.is_available()
     if use_cuda:
         compute_dtype = (
@@ -77,11 +152,34 @@ def load_lora_pipeline(
     else:
         compute_dtype = torch.float32
 
+    attn_impl = _attn_implementation()
     common_kw = dict(
         trust_remote_code=trust_remote_code,
         device_map="auto" if use_cuda else None,
         low_cpu_mem_usage=True,
     )
+    if attn_impl:
+        common_kw["attn_implementation"] = attn_impl
+
+    def _load_causal_pretrained(weights_ref: str) -> torch.nn.Module:
+        kw_tries: list[dict] = [common_kw]
+        if "attn_implementation" in common_kw:
+            kw_tries.append(
+                {k: v for k, v in common_kw.items() if k != "attn_implementation"}
+            )
+        for kw in kw_tries:
+            try:
+                return AutoModelForCausalLM.from_pretrained(
+                    weights_ref, dtype=compute_dtype, **kw
+                )
+            except TypeError:
+                try:
+                    return AutoModelForCausalLM.from_pretrained(
+                        weights_ref, torch_dtype=compute_dtype, **kw
+                    )
+                except TypeError:
+                    continue
+        raise RuntimeError(f"Falha ao carregar o modelo: {weights_ref!r}")
 
     merged: Path | None = None
     if merged_model_dir is not None and merged_model_dir.is_dir():
@@ -100,14 +198,7 @@ def load_lora_pipeline(
         tokenizer = AutoTokenizer.from_pretrained(
             str(merged), trust_remote_code=trust_remote_code
         )
-        try:
-            model = AutoModelForCausalLM.from_pretrained(
-                str(merged), dtype=compute_dtype, **common_kw
-            )
-        except TypeError:
-            model = AutoModelForCausalLM.from_pretrained(
-                str(merged), torch_dtype=compute_dtype, **common_kw
-            )
+        model = _load_causal_pretrained(str(merged))
     else:
         if adapter_dir is None or not adapter_dir.is_dir():
             raise FileNotFoundError(
@@ -117,14 +208,7 @@ def load_lora_pipeline(
         tokenizer = AutoTokenizer.from_pretrained(
             model_name, trust_remote_code=trust_remote_code
         )
-        try:
-            model = AutoModelForCausalLM.from_pretrained(
-                model_name, dtype=compute_dtype, **common_kw
-            )
-        except TypeError:
-            model = AutoModelForCausalLM.from_pretrained(
-                model_name, torch_dtype=compute_dtype, **common_kw
-            )
+        model = _load_causal_pretrained(model_name)
         model = PeftModel.from_pretrained(model, str(adapter_dir))
 
     if tokenizer.pad_token is None:
@@ -136,6 +220,9 @@ def load_lora_pipeline(
 
     if fix_generation_max_length and hasattr(model, "generation_config"):
         model.generation_config.max_length = None
+
+    model = _maybe_compile_model(model)
+    _forward_warmup(tokenizer, model)
 
     return tokenizer, model, merged
 
@@ -164,7 +251,7 @@ def generate_chat_reply(
         model_inputs = {k: v.to(device) for k, v in model_inputs.items()}
 
     input_ids = model_inputs["input_ids"]
-    with torch.no_grad():
+    with torch.inference_mode():
         out = model.generate(
             **model_inputs,
             max_new_tokens=max_new_tokens,
