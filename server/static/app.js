@@ -12,8 +12,6 @@
   const emptyState = document.getElementById("empty-state");
   const inputEl = document.getElementById("input");
   const sendBtn = document.getElementById("send");
-  const statusEl = document.getElementById("status");
-  const menuStatusEl = document.getElementById("menu-status");
   const newChatBtn = document.getElementById("new-chat");
   const mobileNewChatBtn = document.getElementById("mobile-new-chat");
   const menuNewChatBtn = document.getElementById("menu-new-chat");
@@ -280,22 +278,6 @@
   function updateEmptyState() {
     const hasMessages = logInner.children.length > 0;
     emptyState.hidden = hasMessages;
-  }
-
-  function setStatusText(text, ready) {
-    if (statusEl) {
-      statusEl.textContent = text;
-    }
-    if (menuStatusEl) {
-      menuStatusEl.textContent = text;
-    }
-    if (ready) {
-      statusEl && statusEl.classList.add("ready");
-      menuStatusEl && menuStatusEl.classList.add("ready");
-    } else {
-      statusEl && statusEl.classList.remove("ready");
-      menuStatusEl && menuStatusEl.classList.remove("ready");
-    }
   }
 
   function openMobileMenu() {
@@ -655,26 +637,6 @@
       }
     } catch (_) {}
   });
-
-  async function refreshStatus() {
-    try {
-      const r = await apiFetch("/api/status");
-      if (r.status === 401) {
-        window.location.href = "/login";
-        return;
-      }
-      const j = await r.json();
-      if (j.ui_only) {
-        setStatusText("UI (sem modelo)", false);
-      } else if (j.loaded) {
-        setStatusText(j.mode + " · " + j.model_name, true);
-      } else {
-        setStatusText("A carregar modelo…", false);
-      }
-    } catch {
-      setStatusText("Sem ligação", false);
-    }
-  }
 
   async function loadSessionUser() {
     try {
@@ -1533,8 +1495,6 @@
   void (async function initPage() {
     await loadSessionUser();
     await bootChats();
-    refreshStatus();
     startGenerationStatusPolling();
   })();
-  setInterval(refreshStatus, 8000);
 })();
