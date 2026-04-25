@@ -152,7 +152,20 @@
         </div>
         <div class="composer-outer" id="composer-outer">
           <div class="composer-wrap">
-            <div class="composer">
+            <div class="composer" id="composer" data-composer-surface>
+              <div class="composer-leading">
+                <button
+                  type="button"
+                  class="composer-icon-btn"
+                  id="composer-plus"
+                  aria-label="Anexar ficheiros (brevemente)"
+                  title="Brevemente"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
+                </button>
+              </div>
               <div class="composer-body">
                 <textarea id="input" rows="1" placeholder="Pergunte alguma coisa"></textarea>
               </div>

@@ -1144,51 +1144,118 @@ body.menu-open {
   margin-inline: auto;
 }
 
+/* Grid estilo ChatGPT: leading | primary | trailing */
 .composer {
   width: 100%;
   max-width: 48rem;
-  display: flex;
-  flex-direction: row;
-  align-items: flex-end;
-  gap: 0.35rem;
-  padding: 0.35rem 0.4rem 0.35rem 0.85rem;
-  border-radius: 1.625rem;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: "leading primary trailing";
+  align-items: center;
+  gap: 0.15rem 0.35rem;
+  padding: 0.625rem;
+  border-radius: 28px;
   border: 1px solid var(--border-subtle);
   background: var(--composer-bg);
-  box-shadow: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.composer--expanded {
+  align-items: flex-end;
 }
 
 .composer:focus-within {
   border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }
 
-/* Texto à esquerda; botão à direita, alinhado ao fundo quando há várias linhas */
+.composer-leading {
+  grid-area: leading;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  padding-inline: 0.1rem;
+}
+
+.composer--expanded .composer-leading {
+  align-self: flex-end;
+  padding-bottom: 0.2rem;
+}
+
+.composer-icon-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease;
+}
+
+.composer-icon-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.composer-icon-btn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 1px;
+}
+
 .composer-body {
-  flex: 1 1 auto;
+  grid-area: primary;
   min-width: 0;
-  width: auto;
+  min-height: 3.5rem; /* min-h-14: campo “vazio” com altura estável */
+  display: flex;
+  align-items: center;
+  overflow-x: hidden;
+  transition: min-height 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.composer--expanded .composer-body {
+  align-items: stretch;
+  align-self: stretch;
 }
 
 .composer-actions {
+  grid-area: trailing;
   display: flex;
   flex-direction: row;
   justify-content: flex-end;
   align-items: center;
   flex-shrink: 0;
-  width: auto;
+  align-self: center;
   padding: 0;
-  margin: 0 0 1px 0;
+  margin: 0;
+  transition: align-self 0.2s ease;
+}
+
+.composer--expanded .composer-actions {
   align-self: flex-end;
+  padding-bottom: 0.15rem;
 }
 
 #input {
   display: block;
   width: 100%;
   min-width: 0;
-  min-height: 1.45rem;
-  max-height: 240px;
+  min-height: 1.35rem;
+  max-height: min(13rem, 32vh);
   margin: 0;
-  padding: 0.28rem 0.15rem 0.28rem 0;
+  padding: 0.35rem 0.2rem;
   border: none;
   background: transparent;
   color: var(--text);
@@ -1207,6 +1274,7 @@ body.menu-open {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
   box-sizing: border-box;
+  transition: height 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 #input::placeholder {
@@ -1238,8 +1306,8 @@ body.menu-open {
 
 .send-btn {
   flex-shrink: 0;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   margin: 0;
   display: flex;
   align-items: center;
@@ -1249,7 +1317,10 @@ body.menu-open {
   background: var(--send-idle);
   color: var(--main-bg);
   cursor: not-allowed;
-  transition: background 0.15s ease, transform 0.1s ease;
+  transition:
+    background 0.18s ease,
+    transform 0.1s ease,
+    opacity 0.18s ease;
 }
 
 .send-btn:not(:disabled) {
@@ -1293,8 +1364,8 @@ body.menu-open {
 }
 
 .send-btn svg {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
 }
 
 /* Smartphone */

@@ -11,6 +11,8 @@
   const composerOuter = document.getElementById("composer-outer");
   const emptyState = document.getElementById("empty-state");
   const inputEl = document.getElementById("input");
+  const composerEl = document.getElementById("composer");
+  const composerPlusBtn = document.getElementById("composer-plus");
   const sendBtn = document.getElementById("send");
   const newChatBtn = document.getElementById("new-chat");
   const mobileNewChatBtn = document.getElementById("mobile-new-chat");
@@ -189,14 +191,30 @@
     }
   }
 
-  const MAX_INPUT_HEIGHT = 240;
   const SWIPE_CLOSE_PX = 72;
   const MEDIA_MOBILE = window.matchMedia("(max-width: 768px)");
 
+  function _inputMaxHeightPx() {
+    const fs = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    return Math.min(13 * fs, window.innerHeight * 0.32);
+  }
+
+  function updateComposerExpanded() {
+    if (!composerEl || !inputEl) return;
+    const style = getComputedStyle(inputEl);
+    const lh = parseFloat(style.lineHeight);
+    const lineH = Number.isFinite(lh) && lh > 0 ? lh : parseFloat(style.fontSize || "16") * 1.45;
+    const hasBreak = inputEl.value.indexOf("\n") !== -1;
+    const multiLine = hasBreak || inputEl.scrollHeight > Math.ceil(lineH) + 8;
+    composerEl.classList.toggle("composer--expanded", multiLine);
+  }
+
   function autoResizeInput() {
     inputEl.style.height = "auto";
-    const h = Math.min(inputEl.scrollHeight, MAX_INPUT_HEIGHT);
+    const cap = _inputMaxHeightPx();
+    const h = Math.min(inputEl.scrollHeight, cap);
     inputEl.style.height = h + "px";
+    updateComposerExpanded();
   }
 
   const SEND_BTN_ICON =
@@ -1458,6 +1476,18 @@
     }
     send();
   });
+  composerPlusBtn?.addEventListener("click", () => {
+    inputEl?.focus();
+  });
+
+  window.addEventListener(
+    "resize",
+    function onComposerResize() {
+      autoResizeInput();
+    },
+    { passive: true }
+  );
+
   inputEl.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
