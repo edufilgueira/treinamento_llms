@@ -1,6 +1,6 @@
 """
 Motor de inferência partilhado: base Hugging Face + adapter LoRA (ou pasta modelo fundido).
-Usado por trein/inferir.py e server/serve_lora.py.
+Usado por `server/serve_lora.py` (e pode ser importado por scripts de treino que partilhem a mesma stack).
 """
 
 from __future__ import annotations
@@ -130,15 +130,18 @@ def load_lora_pipeline(
     adapter_dir: Path | None,
     merged_model_dir: Path | None,
     *,
+    base_only: bool = False,
     trust_remote_code: bool = False,
     fix_generation_max_length: bool = True,
 ) -> tuple[AutoTokenizer, torch.nn.Module, Path | None]:
     """
     Carrega tokenizer + modelo.
-    - Se ``merged_model_dir`` existir e for pasta válida **com pesos**, carrega só o modelo fundido.
+    - Se ``base_only`` é True: carrega **só** o modelo base a partir de ``model_name`` (Hugging Face ou pasta local);
+      ignora merge e LoRA (útil para testar Qwen, etc. antes de treinar adapter).
+    - Se ``merged_model_dir`` existir e for pasta válida **com pesos** (e **não** ``base_only``), carrega só o modelo fundido.
     - Senão: base ``model_name`` + ``PeftModel`` em ``adapter_dir``.
 
-    O terceiro valor devolvido é o caminho do merge **efetivamente** usado, ou ``None`` se carregou base+adapter.
+    O terceiro valor devolvido é o caminho do merge **efetivamente** usado, ou ``None`` se carregou base+adapter ou só base.
 
     **Performance (GPU):** `ORACULO_ATTN_IMPLEMENTATION` (padrão ``sdpa``), matmul `ORACULO_MATMUL_PRECISION`,
     opcional `ORACULO_TORCH_COMPILE=1` e `ORACULO_CUDNN_BENCHMARK=1` — ver comentário em `server/.env.example`.
@@ -182,14 +185,14 @@ def load_lora_pipeline(
         raise RuntimeError(f"Falha ao carregar o modelo: {weights_ref!r}")
 
     merged: Path | None = None
-    if merged_model_dir is not None and merged_model_dir.is_dir():
+    if not base_only and merged_model_dir is not None and merged_model_dir.is_dir():
         if (merged_model_dir / "config.json").is_file():
             if hf_local_dir_has_model_weights(merged_model_dir):
                 merged = merged_model_dir
             else:
                 print(
                     f"Aviso: pasta fundida incompleta (sem pesos .safetensors/.bin): {merged_model_dir}. "
-                    "A usar modelo base + adapter.",
+                    "A usar modelo base + adapter (ou defina --base-only / ORACULO_BASE_ONLY=1 se não tiver LoRA).",
                     file=sys.stderr,
                     flush=True,
                 )
@@ -199,11 +202,17 @@ def load_lora_pipeline(
             str(merged), trust_remote_code=trust_remote_code
         )
         model = _load_causal_pretrained(str(merged))
+    elif base_only:
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_name, trust_remote_code=trust_remote_code
+        )
+        model = _load_causal_pretrained(model_name)
     else:
         if adapter_dir is None or not adapter_dir.is_dir():
             raise FileNotFoundError(
                 f"Adapter não encontrado: {adapter_dir}. "
-                "Treine com train_lora.py ou passe --merged_model_dir."
+                "Treine com train_lora.py, passe --merged_model_dir, "
+                "ou use --base-only (ORACULO_BASE_ONLY=1) para carregar só o modelo base do Hub."
             )
         tokenizer = AutoTokenizer.from_pretrained(
             model_name, trust_remote_code=trust_remote_code

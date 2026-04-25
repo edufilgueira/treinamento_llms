@@ -338,4 +338,10 @@ Se for:
 
 ---
 
-Se quiser, posso te dizer exatamente quanto de RAM e tokens/s você vai ter com seu modelo nesse servidor — isso ajuda muito na decisão final.
+```bash
+pip install -r server/requirements.txt
+pip install -r server/requirements-gguf.txt
+export ORACULO_INFERENCE_BACKEND=gguf
+export ORACULO_GGUF_PATH="$HOME/treinamento_llms/tools/quantized_model/Merged_Model-3.1B-Q4_K_M.gguf"
+cd ~/treinamento_llms && python3 server/serve_lora.py
+```

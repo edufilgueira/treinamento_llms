@@ -105,6 +105,7 @@ class ModelRuntime:
         adapter_dir: Path,
         merged: Path | None,
         *,
+        base_only: bool = False,
         trust_remote_code: bool = False,
     ) -> None:
         from lora_engine import load_lora_pipeline
@@ -116,12 +117,18 @@ class ModelRuntime:
             model_name,
             adapter_dir,
             merged,
+            base_only=base_only,
             trust_remote_code=trust_remote_code,
             fix_generation_max_length=True,
         )
         self._tokenizer = tokenizer
         self._model = model
-        self._mode = "fundido" if merged_used is not None else "base+LoRA"
+        if merged_used is not None:
+            self._mode = "fundido"
+        elif base_only:
+            self._mode = "base"
+        else:
+            self._mode = "base+LoRA"
         self._model_id = str(merged_used.resolve()) if merged_used is not None else model_name
 
     def load_gguf(self, gguf_path: Path) -> None:

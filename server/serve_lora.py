@@ -181,6 +181,12 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument("--trust_remote_code", action="store_true")
     p.add_argument(
+        "--base-only",
+        action="store_true",
+        help="Só o modelo base do Hub (sem LoRA, sem merge). Útil para testar antes de treinar. "
+        "Também: ORACULO_BASE_ONLY=1. Use com --model_name (ex. Qwen/Qwen3-8B) ou ORACULO_MODEL_NAME.",
+    )
+    p.add_argument(
         "--ui-only",
         action="store_true",
         help="Não carrega o modelo: só autenticação e ficheiros estáticos. (Ou ORACULO_UI_ONLY=1.)",
@@ -201,6 +207,13 @@ def _parse_args() -> argparse.Namespace:
     if ib is None:
         ib = _inference_backend_from_env()
     args.inference_backend = ib
+    mn_env = (os.environ.get("ORACULO_MODEL_NAME") or "").strip()
+    if mn_env:
+        args.model_name = mn_env
+    if not args.base_only:
+        bo = (os.environ.get("ORACULO_BASE_ONLY") or "").strip().lower()
+        if bo in ("1", "true", "yes", "on"):
+            args.base_only = True
     return args
 
 
@@ -315,11 +328,18 @@ async def lifespan(app: FastAPI):
             rt.load_gguf(gguf)
         else:
             merged = _resolve_merged_path(args.merged_model_dir)
-            print("A carregar modelo (só uma vez; pode demorar)…", flush=True)
+            if args.base_only:
+                print(
+                    f"A carregar só o modelo base (sem LoRA/merge)…\n  {args.model_name}",
+                    flush=True,
+                )
+            else:
+                print("A carregar modelo (só uma vez; pode demorar)…", flush=True)
             rt.load(
                 args.model_name,
                 args.adapter_dir,
                 merged,
+                base_only=bool(getattr(args, "base_only", False)),
                 trust_remote_code=args.trust_remote_code,
             )
     except Exception as err:
