@@ -1099,7 +1099,7 @@ body.menu-open {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: 1rem 1rem 0;
+  padding: 0.65rem 1rem 0;
   isolation: isolate;
 }
 
@@ -1148,58 +1148,62 @@ body.menu-open {
   width: 100%;
   max-width: 48rem;
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
-  padding: 0.6rem 0.55rem 0 1rem;
-  border-radius: 1.5rem;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 0.35rem;
+  padding: 0.35rem 0.4rem 0.35rem 0.85rem;
+  border-radius: 1.625rem;
   border: 1px solid var(--border-subtle);
   background: var(--composer-bg);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+  box-shadow: none;
 }
 
 .composer:focus-within {
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.14);
 }
 
-/* Zona de texto: largura total; scroll encostado à direita do bloco */
+/* Texto à esquerda; botão à direita, alinhado ao fundo quando há várias linhas */
 .composer-body {
-  width: 100%;
+  flex: 1 1 auto;
   min-width: 0;
+  width: auto;
 }
 
-/* Rodapé do bloco (estilo GPT): enviar à direita, textarea ocupa tudo acima */
 .composer-actions {
   display: flex;
   flex-direction: row;
   justify-content: flex-end;
   align-items: center;
   flex-shrink: 0;
-  width: 100%;
-  padding: 0.35rem 0.2rem 0.45rem 0;
-  margin-top: 0.15rem;
+  width: auto;
+  padding: 0;
+  margin: 0 0 1px 0;
+  align-self: flex-end;
 }
 
 #input {
   display: block;
   width: 100%;
   min-width: 0;
-  min-height: 28px;
-  max-height: 320px;
+  min-height: 1.45rem;
+  max-height: 240px;
   margin: 0;
-  padding: 0.4rem 0.1rem 0.45rem 0;
+  padding: 0.28rem 0.15rem 0.28rem 0;
   border: none;
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 1rem;
-  line-height: 1.5;
+  font-size: 0.9375rem;
+  line-height: 1.45;
   resize: none;
   overflow-y: auto;
   overflow-x: hidden;
   outline: none;
   direction: ltr;
   text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
   box-sizing: border-box;
@@ -1234,8 +1238,8 @@ body.menu-open {
 
 .send-btn {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   margin: 0;
   display: flex;
   align-items: center;
@@ -1289,8 +1293,8 @@ body.menu-open {
 }
 
 .send-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
 }
 
 /* Smartphone */

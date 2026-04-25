@@ -189,7 +189,7 @@
     }
   }
 
-  const MAX_INPUT_HEIGHT = 320;
+  const MAX_INPUT_HEIGHT = 240;
   const SWIPE_CLOSE_PX = 72;
   const MEDIA_MOBILE = window.matchMedia("(max-width: 768px)");
 
