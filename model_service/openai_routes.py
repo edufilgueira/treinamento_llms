@@ -125,12 +125,12 @@ async def list_models(authorization: Annotated[str | None, Header()] = None) -> 
     }
 
 
-@router.post("/chat/completions")
+@router.post("/chat/completions", response_model=None)
 async def chat_completions(
     request: Request,
     body: OAIChatCompletionRequest,
     authorization: Annotated[str | None, Header()] = None,
-) -> JSONResponse | StreamingResponse:
+):
     _verify_bearer(authorization)
     rt = get_runtime()
     if rt.ui_only or not rt.is_loaded:
