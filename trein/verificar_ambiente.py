@@ -98,7 +98,8 @@ def _pip_freeze() -> str:
 def _torch_import_ok() -> bool:
     try:
         import torch  # noqa: F401
-    except ImportError:
+    except (ImportError, OSError):
+        # OSError: ex. libtorch_global_deps.so em falta (instalação interrompida a meio do wheel).
         return False
     return True
 
@@ -107,8 +108,14 @@ def torch_block() -> list[str]:
     out: list[str] = ["--- PyTorch (wheel em uso) ---"]
     try:
         import torch
-    except ImportError:
-        out.append("torch: não importável (ainda a instalar, venv vazio, ou instalação a meio).")
+    except (ImportError, OSError) as e:
+        out.append("torch: não importa correctamente (instalação incompleta, interrompida, ou ficheiros .so em falta).")
+        out.append(f"  detalhe: {e!s}")
+        if "libtorch" in str(e) or "shared object" in str(e) or "No such file" in str(e):
+            out.append("  (típico: pip a meio de 'Installing torch' foi parado com Ctrl+Z, SIGKILL, ou quota/disco; o pacote fica partido no site-packages).")
+        out.append("  repara:  pip uninstall -y torch")
+        out.append("          export TMPDIR=/workspace/_pip_tmp; mkdir -p $TMPDIR")
+        out.append("          pip install --no-cache-dir 'torch>=2.1'")
         return out
 
     out.append(f"torch.__version__: {torch.__version__}")
@@ -206,10 +213,12 @@ def partial_install_block(freeze: str) -> list[str]:
     return []
 
 
-def slow_torch_wheel_tips() -> list[str]:
+def slow_torch_wheel_tips(freeze: str) -> list[str]:
     """Ajudar quem fica muito tempo em 'Installing torch' (ficheiro .whl ~0.5GB)."""
     if _torch_import_ok():
         return []
+    if any(l.strip().startswith("torch==") for l in freeze.splitlines()):
+        return []  # torch já consta no pip: falha = pacote a meio, ver bloco PyTorch
     return [
         "--- se travas em 'Installing collected packages: torch' ---",
         "O wheel pesa centenas de MB: o pip está a *descomprimir* milhares de ficheiros para .venv. Em disco de rede, overlay Docker ou cota, pode levar 15-45+ min e parece parado — verifica com outro shell:",
@@ -245,7 +254,7 @@ def run(out_f: TextIO | None) -> int:
     extra = partial_install_block(freeze)
     if extra:
         lines.extend(extra)
-    lines.extend(slow_torch_wheel_tips())
+    lines.extend(slow_torch_wheel_tips(freeze))
     lines.extend(pip_nvidia_sanity(freeze))
     lines.append("")
     lines.extend(hf_block())
