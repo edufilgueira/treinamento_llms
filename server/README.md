@@ -29,6 +29,7 @@ Copia `server/.env.example` para **`server/.env`** e preenche `ORACULO_PG_*` (e 
 ```bash
 cd /caminho/para/TREINAMENTO\ LLM
 python3 server/serve_lora.py
+python3 server/serve_lora.py --base-only --model_name Qwen/Qwen3-8B --trust_remote_code
 ```
 
 Atalho com venv:

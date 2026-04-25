@@ -6,6 +6,7 @@ Usado por `server/serve_lora.py` (e pode ser importado por scripts de treino que
 from __future__ import annotations
 
 import os
+import re
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -125,6 +126,30 @@ def hf_local_dir_has_model_weights(path: Path) -> bool:
     return False
 
 
+def _reject_gguf_only_hub_id(model_name: str) -> None:
+    """
+    Repositórios no Hub com sufixo *-GGUF* (ex. TheBloke/...) publicam ficheiros `.gguf` para
+    llama.cpp, não um modelo carregável por `transformers` + PyTorch.
+    """
+    s = (model_name or "").strip()
+    if not s:
+        return
+    p = Path(s)
+    if p.is_dir() or p.is_file():
+        return
+    if not re.search(r"[-_]GGUF\b", s, re.I):
+        return
+    raise ValueError(
+        f"O ID {s!r} parece ser um repositório **só GGUF** (ficheiros .gguf para llama.cpp), "
+        "não um modelo Hugging Face completo (config + safetensors).\n"
+        "• Modo **PyTorch** (actual): use o ID **sem** sufixo GGUF, ex. "
+        "`mistralai/Mistral-7B-Instruct-v0.3`.\n"
+        "• Para **.gguf**: defina `ORACULO_INFERENCE_BACKEND=gguf` e `ORACULO_GGUF_PATH` "
+        "com o caminho local de um ficheiro `.gguf` (pode descarregar desse repositório TheBloke). "
+        "Ver `server/README_INFERENCE_HF_GGUF.md`."
+    )
+
+
 def load_lora_pipeline(
     model_name: str,
     adapter_dir: Path | None,
@@ -202,23 +227,25 @@ def load_lora_pipeline(
             str(merged), trust_remote_code=trust_remote_code
         )
         model = _load_causal_pretrained(str(merged))
-    elif base_only:
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_name, trust_remote_code=trust_remote_code
-        )
-        model = _load_causal_pretrained(model_name)
     else:
-        if adapter_dir is None or not adapter_dir.is_dir():
-            raise FileNotFoundError(
-                f"Adapter não encontrado: {adapter_dir}. "
-                "Treine com train_lora.py, passe --merged_model_dir, "
-                "ou use --base-only (ORACULO_BASE_ONLY=1) para carregar só o modelo base do Hub."
+        _reject_gguf_only_hub_id(model_name)
+        if base_only:
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_name, trust_remote_code=trust_remote_code
             )
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_name, trust_remote_code=trust_remote_code
-        )
-        model = _load_causal_pretrained(model_name)
-        model = PeftModel.from_pretrained(model, str(adapter_dir))
+            model = _load_causal_pretrained(model_name)
+        else:
+            if adapter_dir is None or not adapter_dir.is_dir():
+                raise FileNotFoundError(
+                    f"Adapter não encontrado: {adapter_dir}. "
+                    "Treine com train_lora.py, passe --merged_model_dir, "
+                    "ou use --base-only (ORACULO_BASE_ONLY=1) para carregar só o modelo base do Hub."
+                )
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_name, trust_remote_code=trust_remote_code
+            )
+            model = _load_causal_pretrained(model_name)
+            model = PeftModel.from_pretrained(model, str(adapter_dir))
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token

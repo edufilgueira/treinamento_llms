@@ -28,7 +28,63 @@ treinamento_llms/
 
 ---
 
-# 🧠 ETAPA 1 — Converter para GGUF
+# 📥 A mesma cadeia, mas o modelo veio do Hugging Face (download em disco)
+
+Há **dois** casos; não confundas:
+
+| O que descarregaste do Hub | O que fazer |
+|----------------------------|------------|
+| **Pasta de modelo “HF completo”** (`config.json` + `model*.safetensors`, *tokenizer*) | É o **mesmo** input que o `merge_lora` grava. Usas o `convert_hf_to_gguf.py` a apontar para **essa pasta local**. Não interessa se o merge veio de LoRA ou se fizeste `huggingface-cli download` de um *checkpoint* aberto. |
+| **Só ficheiros `.gguf`** (repositórios *TheBloke*/*-GGUF*) | **Não** corres `convert_hf_to_gguf` — já é GGUF. Se for um `.gguf` **F16/BF16** “grande”, podes **só** `llama-quantize` para `Q4_K_M` / `Q5_K_M`. Se descarregaste **já** `Q4_K_M` / `Q5_K_M`, usa esse ficheiro no Oráculo; **não** convém “re-quantizar” sem necessidade. |
+
+## 1) Modelo em formato HuggingFace (safetensors) no disco
+
+Instala a CLI (uma vez): `pip install -U "huggingface_hub[cli]"`
+
+Descarrega o snapshot para **uma pasta tua** (exemplo: Mistral 7B instruct):
+
+```bash
+mkdir -p ~/hf_models
+huggingface-cli download mistralai/Mistral-7B-Instruct-v0.3 \
+  --local-dir ~/hf_models/Mistral-7B-Instruct-v0.3
+```
+
+(Se o fornecedor tiver acesso a termos, aceita o modelo no site e, se for preciso, `huggingface-cli login`.)
+
+Dentro do repositório **llama.cpp** (a pasta onde está `convert_hf_to_gguf.py` — os nomes dos scripts mudam entre versões; vê a pasta `tools/` do teu *clone*):
+
+```bash
+cd ~/treinamento_llms/tools/llama.cpp
+# Ajusta o caminho ao script e ao modelo, conforme a tua versão de llama.cpp:
+python tools/convert_hf_to_gguf.py ~/hf_models/Mistral-7B-Instruct-v0.3 --outfile ~/treinamento_llms/tools/quantized_model/Mistral-7B-F16.gguf
+```
+
+Notas:
+
+* Em alguns *commits* o script fica noutro sítio (ex. raiz) ou chama-se com **tipo de modelo** extra (`Qwen2`, `Llama`…). Corre `python .../convert_hf_to_gguf.py -h` na tua versão.
+* A saída costuma ser **um** `.gguf` (F16/BF32); ajusta `--outfile` para `tools/quantized_model/` se quiseres tudo alinhado ao resto do projecto.
+
+Depois, **igual** ao teu processo: quantizas a partir do **.gguf F16** (ver ETAPA 4 abaixo) e usas `ORACULO_GGUF_PATH` nesse ficheiro final.
+
+## 2) Só ficheiro GGUF (ex. TheBloke)
+
+* Coloca o(s) `.gguf` (ex. `*F16*`, `*BF16*`) em `tools/quantized_model/`.
+* **Não** há passo de conversão HF→GGUF.
+* Quantização:
+
+```bash
+cd ~/treinamento_llms/tools/llama.cpp
+./build/bin/llama-quantize \
+  ../quantized_model/O-teu-Modelo-F16.gguf \
+  ../quantized_model/O-teu-Modelo-Q5_K_M.gguf \
+  Q5_K_M
+```
+
+O **último** argumento (`Q4_K_M`, `Q5_K_M`, …) tem de coincidir com o sufixo que queres; o ficheiro de saída convém refletir o mesmo (ex. `...-Q5_K_M.gguf` se usaste `Q5_K_M`).
+
+---
+
+# 🧠 ETAPA 1 — Converter para GGUF (modelo “HF” local, ex. merge do projecto)
 
 Entrar no llama.cpp:
 
@@ -36,11 +92,13 @@ Entrar no llama.cpp:
 cd ~/treinamento_llms/tools/llama.cpp
 ```
 
-Rodar conversão:
+Rodar conversão **com o caminho que tiveres** (merge **ou** pasta descarregada com `huggingface-cli`):
 
 ```bash
 python convert_hf_to_gguf.py ../../trein/outputs/merged_model
 ```
+
+(Em versões recentes, o script pode viver em `tools/`; usa o path que a tua árvore do llama.cpp tiver, como na secção acima.)
 
 ---
 
@@ -112,6 +170,16 @@ Rodar:
 ./build/bin/llama-quantize \
 ../quantized_model/Merged_Model-3.1B-BF16.gguf \
 ../quantized_model/Merged_Model-3.1B-Q4_K_M.gguf \
+Q4_K_M
+```
+
+(O 3.º parâmetro **tem de** corresponder à quantização escolhida; o nome do ficheiro de saída devia bater com isso, ex. `Q5_K_M` no nome **e** no comando se quiseres Q5.)
+
+```bash
+# Exemplo com Q5_K_M (nome e tipo alinhados)
+./build/bin/llama-quantize \
+../quantized_model/Merged_Model-3.1B-BF16.gguf \
+../quantized_model/Merged_Model-3.1B-Q5_K_M.gguf \
 Q5_K_M
 ```
 
