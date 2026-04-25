@@ -194,11 +194,6 @@
   const SWIPE_CLOSE_PX = 72;
   const MEDIA_MOBILE = window.matchMedia("(max-width: 768px)");
 
-  function _inputMaxHeightPx() {
-    const fs = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    return Math.min(13 * fs, window.innerHeight * 0.32);
-  }
-
   function updateComposerExpanded() {
     if (!composerEl || !inputEl) return;
     const style = getComputedStyle(inputEl);
@@ -211,10 +206,16 @@
 
   function autoResizeInput() {
     inputEl.style.height = "auto";
-    const cap = _inputMaxHeightPx();
-    const h = Math.min(inputEl.scrollHeight, cap);
-    inputEl.style.height = h + "px";
+    /* Altura = conteúdo; o scroll fica no .composer-body (estilo ChatGPT) */
+    inputEl.style.height = inputEl.scrollHeight + "px";
     updateComposerExpanded();
+    const body = inputEl.closest(".composer-body");
+    if (body) {
+      const gap = body.scrollHeight - body.clientHeight - body.scrollTop;
+      if (gap < 56) {
+        body.scrollTop = body.scrollHeight;
+      }
+    }
   }
 
   const SEND_BTN_ICON =

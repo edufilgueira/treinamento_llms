@@ -1215,14 +1215,51 @@ body.menu-open {
   outline-offset: 1px;
 }
 
+/* Scroll na coluna do texto (como ChatGPT): barra à direita só na área primary, recortada em altura */
 .composer-body {
   grid-area: primary;
   min-width: 0;
-  min-height: 3.5rem; /* min-h-14: campo “vazio” com altura estável */
+  min-height: 3.5rem; /* min-h-14 */
+  max-height: min(13rem, 32vh);
   display: flex;
   align-items: center;
   overflow-x: hidden;
-  transition: min-height 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  padding-right: 3px;
+  margin-right: 1px;
+  box-sizing: border-box;
+  transition:
+    min-height 0.2s cubic-bezier(0.25, 0.1, 0.25, 1),
+    max-height 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.composer-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.composer-body::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 8px 0 10px 0;
+}
+
+.composer-body::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 100px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.composer-body::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.composer:not(.composer--expanded) .composer-body {
+  align-items: center;
 }
 
 .composer--expanded .composer-body {
@@ -1253,9 +1290,8 @@ body.menu-open {
   width: 100%;
   min-width: 0;
   min-height: 1.35rem;
-  max-height: min(13rem, 32vh);
   margin: 0;
-  padding: 0.35rem 0.2rem;
+  padding: 0.35rem 0.15rem 0.35rem 0;
   border: none;
   background: transparent;
   color: var(--text);
@@ -1263,45 +1299,25 @@ body.menu-open {
   font-size: 0.9375rem;
   line-height: 1.45;
   resize: none;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   outline: none;
   direction: ltr;
   text-align: left;
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: break-word;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) transparent;
   box-sizing: border-box;
+  flex: 0 0 auto;
+  align-self: center;
   transition: height 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.composer--expanded #input {
+  align-self: stretch;
 }
 
 #input::placeholder {
   color: var(--text-secondary);
-}
-
-/* Scroll fino só na zona de texto (mais estreito que o scroll da coluna) */
-#input::-webkit-scrollbar {
-  width: 4px;
-}
-
-#input::-webkit-scrollbar-track {
-  background: transparent;
-  margin: 4px 0 6px 0;
-}
-
-#input::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 100px;
-  border: 1px solid transparent;
-  background-clip: padding-box;
-}
-
-#input::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
-  border: 1px solid transparent;
-  background-clip: padding-box;
 }
 
 .send-btn {
