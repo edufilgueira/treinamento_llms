@@ -226,7 +226,7 @@ def slow_torch_wheel_tips(freeze: str) -> list[str]:
     return [
         "--- se travas em 'Installing collected packages: torch' (download já a 100+ MB/s) ---",
         "O download do .whl é rapido; a fase 'Installing' = escrever dezenas de milhares de ficheiros em site-packages. Em /workspace tipo MooseFS/Rede (ex. RunPod) o *metadata* fica muito lento: 30-90+ min e parece parado, mas o pip está a extrair (não é a rede a falhar).",
-        "  noutro shell:  watch -n3 du -s .venv-trein  (se a pasta cresce, ainda a trabalhar)  |  iotop / dstat  (I/O?)",
+        "  noutro shell:  watch -n3 du -s .venv-trein  (1ª coluna a subir = a instalar, não travado)  |  iotop / dstat  (I/O?)",
         "  df -h /workspace  (espaço). TMPDIR e PIP no workspace:  trein/treina.sh  já define _pip_tmp e .pip_cache no repo, ou: export TMPDIR=.../ _pip_tmp",
         "  se o plano tiver NVMe/SSD local, repõe o venv:  TREIN_VENV_DIR=/caminho/rapido/.venv-trein  ./trein/treina.sh",
         "Bash: 'Stopped' = Ctrl+Z —  fg  ou  kill %N; não suspendas o pip a meio.",

@@ -61,7 +61,7 @@ PIP_EXTR=()
 # ficheiros; em overlay Docker / volume de rede / disco cheio, pode levar 15–45+ min (parece parado).
 _echo_torch_io_hint() {
     echo "Dica: download ~100+ MB/s e 'Installing' lento/parado: normal no /workspace (MFS) — são muitos ficheiros no disco de rede, não a rede a falhar."
-    echo "      Noutro shell:  watch -n3 du -s .venv-trein  (se cresce, ainda está a extrair)  ou:  lsof  (pip a escrever)"
+    echo "      Noutro shell:  watch -n3 du -s .venv-trein  (1ª coluna em KB/1K-blocks; a subir = a instalar, não 'travado')  |  lsof  (pip a escrever)"
     echo "      Podes precisar de 30-90+ min. Disco local NVme (se o provider tiver): TREIN_VENV_DIR=/caminho/rápido/.venv-trein"
     echo "      TREIN_PIP_VERBOSE=1  (ou: pip -v)  |  df -h  (espaço)"
 }

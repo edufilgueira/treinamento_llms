@@ -16,9 +16,19 @@ _TREIN = Path(__file__).resolve().parent
 if str(_TREIN) not in sys.path:
     sys.path.insert(0, str(_TREIN))
 
-import torch
-from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer
+try:
+    import torch
+    from peft import PeftModel
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+except ModuleNotFoundError as e:
+    print(
+        "Falta dependência de treino (peft, transformers, torch, …). Na raiz do repositório:\n"
+        "  source .venv-trein/bin/activate   # ou o venv onde instalaste o treino\n"
+        "  pip install -r trein/requirements.txt\n"
+        f"  (faltava: {getattr(e, 'name', e)!r})",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 from data_config import DEFAULT_ADAPTER_DIR, DEFAULT_MERGED_MODEL_DIR, DEFAULT_MODEL_NAME
 
