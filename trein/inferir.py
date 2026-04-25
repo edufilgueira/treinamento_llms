@@ -52,7 +52,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    tokenizer, model = load_lora_pipeline(
+    tokenizer, model, _ = load_lora_pipeline(
         args.model_name,
         args.adapter_dir,
         None,

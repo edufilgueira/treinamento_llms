@@ -5,6 +5,7 @@ Usado por trein/inferir.py e server/serve_lora.py.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 from threading import Event, Thread
@@ -31,6 +32,28 @@ class _CancelStoppingCriteria(StoppingCriteria):
         return self.cancel_event.is_set()
 
 
+def hf_local_dir_has_model_weights(path: Path) -> bool:
+    """
+    True se a pasta tiver pesos carregáveis pelo Transformers (merge completo ou Hub local).
+    Evita tratar como fundido uma pasta só com config.json (merge interrompido).
+    """
+    if not path.is_dir():
+        return False
+    if (path / "model.safetensors").is_file() or (path / "pytorch_model.bin").is_file():
+        return True
+    if (path / "model.safetensors.index.json").is_file():
+        return True
+    for child in path.iterdir():
+        if not child.is_file():
+            continue
+        name = child.name
+        if name.startswith("model-") and name.endswith(".safetensors"):
+            return True
+        if name.startswith("pytorch_model-") and name.endswith(".bin"):
+            return True
+    return False
+
+
 def load_lora_pipeline(
     model_name: str,
     adapter_dir: Path | None,
@@ -38,11 +61,13 @@ def load_lora_pipeline(
     *,
     trust_remote_code: bool = False,
     fix_generation_max_length: bool = True,
-) -> tuple[AutoTokenizer, torch.nn.Module]:
+) -> tuple[AutoTokenizer, torch.nn.Module, Path | None]:
     """
     Carrega tokenizer + modelo.
-    - Se ``merged_model_dir`` existir e for pasta válida, carrega só o modelo fundido.
+    - Se ``merged_model_dir`` existir e for pasta válida **com pesos**, carrega só o modelo fundido.
     - Senão: base ``model_name`` + ``PeftModel`` em ``adapter_dir``.
+
+    O terceiro valor devolvido é o caminho do merge **efetivamente** usado, ou ``None`` se carregou base+adapter.
     """
     use_cuda = torch.cuda.is_available()
     if use_cuda:
@@ -61,7 +86,15 @@ def load_lora_pipeline(
     merged: Path | None = None
     if merged_model_dir is not None and merged_model_dir.is_dir():
         if (merged_model_dir / "config.json").is_file():
-            merged = merged_model_dir
+            if hf_local_dir_has_model_weights(merged_model_dir):
+                merged = merged_model_dir
+            else:
+                print(
+                    f"Aviso: pasta fundida incompleta (sem pesos .safetensors/.bin): {merged_model_dir}. "
+                    "A usar modelo base + adapter.",
+                    file=sys.stderr,
+                    flush=True,
+                )
 
     if merged is not None:
         tokenizer = AutoTokenizer.from_pretrained(
@@ -104,7 +137,7 @@ def load_lora_pipeline(
     if fix_generation_max_length and hasattr(model, "generation_config"):
         model.generation_config.max_length = None
 
-    return tokenizer, model
+    return tokenizer, model, merged
 
 
 def generate_chat_reply(

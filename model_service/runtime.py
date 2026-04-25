@@ -80,7 +80,7 @@ class ModelRuntime:
         from lora_engine import load_lora_pipeline
 
         self.ui_only = False
-        tokenizer, model = load_lora_pipeline(
+        tokenizer, model, merged_used = load_lora_pipeline(
             model_name,
             adapter_dir,
             merged,
@@ -89,7 +89,7 @@ class ModelRuntime:
         )
         self._tokenizer = tokenizer
         self._model = model
-        self._mode = "fundido" if merged is not None else "base+LoRA"
+        self._mode = "fundido" if merged_used is not None else "base+LoRA"
         self._model_id = model_name
 
     def clear(self) -> None:
