@@ -4,6 +4,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
+# RunPod/Cloud: /workspace costuma ser rede (MFS) — o download de wheels é rápido, mas descompactar
+# o torch (50k+ ficheiros) no site-packages é lento. TMPDIR/PIP no mesmo volume evita /tmp
+# pequeno; para máximo desempenho, usa venv+repo num disco local NVMe (TREIN_VENV_DIR) se o plano
+# oferecer (ver documentação do provider).
+export TMPDIR="${TMPDIR:-$REPO_ROOT/_pip_tmp}"
+export PIP_CACHE_DIR="${PIP_CACHE_DIR:-$REPO_ROOT/.pip_cache}"
+mkdir -p "$TMPDIR" "$PIP_CACHE_DIR"
+
 # Antes da separação: um único requirements na raiz juntava treino + API (FastAPI, Postgres, …).
 # Agora trein/requirements.txt tem *só* o necessário para train_lora; server/requirements.txt
 # tem o necessário para serve_lora. O stack ML (torch, datasets, trl) é o mesmo tamanho de sempre;
@@ -52,9 +60,10 @@ PIP_EXTR=()
 # O wheel do PyTorch pesa centenas de MB: "Installing torch" = descomprimir milhares de
 # ficheiros; em overlay Docker / volume de rede / disco cheio, pode levar 15–45+ min (parece parado).
 _echo_torch_io_hint() {
-    echo "Dica: se 'Installing torch' for muito lenta — df -h (espaço no disco do venv);"
-    echo "      se /tmp for pequeno: export TMPDIR=\"$REPO_ROOT/_pip_tmp\" && mkdir -p \"\$TMPDIR\";"
-    echo "      TREIN_PIP_VERBOSE=1  ./trein/treina.sh  (ou: pip install -v 'torch>=2.1' )."
+    echo "Dica: download ~100+ MB/s e 'Installing' lento/parado: normal no /workspace (MFS) — são muitos ficheiros no disco de rede, não a rede a falhar."
+    echo "      Noutro shell:  watch -n3 du -s .venv-trein  (se cresce, ainda está a extrair)  ou:  lsof  (pip a escrever)"
+    echo "      Podes precisar de 30-90+ min. Disco local NVme (se o provider tiver): TREIN_VENV_DIR=/caminho/rápido/.venv-trein"
+    echo "      TREIN_PIP_VERBOSE=1  (ou: pip -v)  |  df -h  (espaço)"
 }
 
 # Instala dependências se faltar qualquer pacote do treino (não só torch)

@@ -220,13 +220,12 @@ def slow_torch_wheel_tips(freeze: str) -> list[str]:
     if any(l.strip().startswith("torch==") for l in freeze.splitlines()):
         return []  # torch já consta no pip: falha = pacote a meio, ver bloco PyTorch
     return [
-        "--- se travas em 'Installing collected packages: torch' ---",
-        "O wheel pesa centenas de MB: o pip está a *descomprimir* milhares de ficheiros para .venv. Em disco de rede, overlay Docker ou cota, pode levar 15-45+ min e parece parado — verifica com outro shell:",
-        "  df -h /workspace  (e o filesystem do .venv; precisas de vários GB livres; se /tmp for pequeno: export TMPDIR=/workspace/_pip_tmp; mkdir -p $TMPDIR )",
-        "  ps aux | grep pip   (processo a correr?),   iotop   ou  dstat  (disco a trabalhar?)",
-        "  TREIN_PIP_VERBOSE=1  ./trein/treina.sh  ou:  pip install -v 'torch>=2.1'  (vês progresso de fase)",
-        "Bash: se aparece 'Stopped' + '[N]+' no job, usaste Ctrl+Z (suspende o pip).  fg  para retomar, ou  kill %N  e instala de novo; não deixes o job 'Stopped' a ocupar ficheiros a meio.",
-        "Não interrompas ao primeiro minuto; só cancela se df estiver 100% cheio, OOM, ou 0% I/O de horas a fio.",
+        "--- se travas em 'Installing collected packages: torch' (download já a 100+ MB/s) ---",
+        "O download do .whl é rapido; a fase 'Installing' = escrever dezenas de milhares de ficheiros em site-packages. Em /workspace tipo MooseFS/Rede (ex. RunPod) o *metadata* fica muito lento: 30-90+ min e parece parado, mas o pip está a extrair (não é a rede a falhar).",
+        "  noutro shell:  watch -n3 du -s .venv-trein  (se a pasta cresce, ainda a trabalhar)  |  iotop / dstat  (I/O?)",
+        "  df -h /workspace  (espaço). TMPDIR e PIP no workspace:  trein/treina.sh  já define _pip_tmp e .pip_cache no repo, ou: export TMPDIR=.../ _pip_tmp",
+        "  se o plano tiver NVMe/SSD local, repõe o venv:  TREIN_VENV_DIR=/caminho/rapido/.venv-trein  ./trein/treina.sh",
+        "Bash: 'Stopped' = Ctrl+Z —  fg  ou  kill %N; não suspendas o pip a meio.",
         "",
     ]
 

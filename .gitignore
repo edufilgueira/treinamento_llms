@@ -1,5 +1,7 @@
 .venv/
 .venv-trein/
+.pip_cache/
+_pip_tmp/
 venv/
 __pycache__/
 *.py[cod]
