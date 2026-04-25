@@ -1144,15 +1144,22 @@ body.menu-open {
   margin-inline: auto;
 }
 
-/* Grid estilo ChatGPT: leading | primary | trailing */
+/*
+ * Grid estilo ChatGPT:
+ * - Colapsado: uma linha [ + | texto | enviar ]
+ * - Expandido: texto em cima a largura total (scroll à direita do cartão);
+ *              segunda linha [ + | · | enviar ]
+ */
 .composer {
   width: 100%;
   max-width: 48rem;
   display: grid;
   grid-template-columns: auto 1fr auto;
+  grid-template-rows: auto;
   grid-template-areas: "leading primary trailing";
   align-items: center;
-  gap: 0.15rem 0.35rem;
+  column-gap: 0.35rem;
+  row-gap: 0;
   padding: 0.625rem;
   border-radius: 28px;
   border: 1px solid var(--border-subtle);
@@ -1163,8 +1170,14 @@ body.menu-open {
     box-shadow 0.2s ease;
 }
 
-.composer--expanded {
-  align-items: flex-end;
+.composer.composer--expanded {
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "primary primary primary"
+    "leading . trailing";
+  align-items: start;
+  row-gap: 0.35rem;
+  column-gap: 0.35rem;
 }
 
 .composer:focus-within {
@@ -1181,9 +1194,9 @@ body.menu-open {
   padding-inline: 0.1rem;
 }
 
-.composer--expanded .composer-leading {
-  align-self: flex-end;
-  padding-bottom: 0.2rem;
+.composer.composer--expanded .composer-leading {
+  align-self: end;
+  justify-self: start;
 }
 
 .composer-icon-btn {
@@ -1215,7 +1228,7 @@ body.menu-open {
   outline-offset: 1px;
 }
 
-/* Scroll na coluna do texto (como ChatGPT): barra à direita só na área primary, recortada em altura */
+/* Scroll no bloco de texto; expandido = largura total → barra encosta à direita do compositor */
 .composer-body {
   grid-area: primary;
   min-width: 0;
@@ -1228,12 +1241,20 @@ body.menu-open {
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
-  padding-right: 3px;
-  margin-right: 1px;
+  padding-right: 2px;
+  margin-right: 0;
   box-sizing: border-box;
   transition:
     min-height 0.2s cubic-bezier(0.25, 0.1, 0.25, 1),
     max-height 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.composer.composer--expanded .composer-body {
+  padding-right: 0;
+  align-self: stretch;
+  justify-self: stretch;
+  width: 100%;
+  align-items: stretch;
 }
 
 .composer-body::-webkit-scrollbar {
@@ -1242,7 +1263,7 @@ body.menu-open {
 
 .composer-body::-webkit-scrollbar-track {
   background: transparent;
-  margin: 8px 0 10px 0;
+  margin: 6px 0 8px 0;
 }
 
 .composer-body::-webkit-scrollbar-thumb {
@@ -1262,11 +1283,6 @@ body.menu-open {
   align-items: center;
 }
 
-.composer--expanded .composer-body {
-  align-items: stretch;
-  align-self: stretch;
-}
-
 .composer-actions {
   grid-area: trailing;
   display: flex;
@@ -1280,9 +1296,9 @@ body.menu-open {
   transition: align-self 0.2s ease;
 }
 
-.composer--expanded .composer-actions {
-  align-self: flex-end;
-  padding-bottom: 0.15rem;
+.composer.composer--expanded .composer-actions {
+  align-self: end;
+  justify-self: end;
 }
 
 #input {
