@@ -49,10 +49,19 @@ export PIP_DEFAULT_TIMEOUT="${PIP_DEFAULT_TIMEOUT:-120}"
 PIP_EXTR=()
 [ "${TREIN_PIP_VERBOSE:-0}" = "1" ] && PIP_EXTR=(-v)
 
+# O wheel do PyTorch pesa centenas de MB: "Installing torch" = descomprimir milhares de
+# ficheiros; em overlay Docker / volume de rede / disco cheio, pode levar 15–45+ min (parece parado).
+_echo_torch_io_hint() {
+    echo "Dica: se 'Installing torch' for muito lenta — df -h (espaço no disco do venv);"
+    echo "      se /tmp for pequeno: export TMPDIR=\"$REPO_ROOT/_pip_tmp\" && mkdir -p \"\$TMPDIR\";"
+    echo "      TREIN_PIP_VERBOSE=1  ./trein/treina.sh  (ou: pip install -v 'torch>=2.1' )."
+}
+
 # Instala dependências se faltar qualquer pacote do treino (não só torch)
 if ! python3 -c "import torch, datasets, peft, trl, transformers" 2>/dev/null; then
     _run_diag "$REPO_LOG_DIR/ambiente_${REPO_LOG_TS}_1_antes_pip.log"
     echo "Instalando dependências (venv: $VENV_DIR)..."
+    _echo_torch_io_hint
     if [ "${USE_CPU_TORCH:-0}" = "1" ]; then
         echo "USE_CPU_TORCH=1: PyTorch CPU-only (sem nvidia-*)."
         pip install "${PIP_EXTR[@]}" torch --index-url https://download.pytorch.org/whl/cpu

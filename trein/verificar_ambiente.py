@@ -82,12 +82,33 @@ def nvidia_smi_block() -> list[str]:
     return out
 
 
+def _pip_freeze() -> str:
+    try:
+        r = subprocess.run(  # noqa: S603
+            [sys.executable, "-m", "pip", "list", "--format=freeze"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        return (r.stdout or "") if r.returncode == 0 else ""
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return ""
+
+
+def _torch_import_ok() -> bool:
+    try:
+        import torch  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
 def torch_block() -> list[str]:
     out: list[str] = ["--- PyTorch (wheel em uso) ---"]
     try:
         import torch
     except ImportError:
-        out.append("torch: não importável (ainda a instalar ou venv vazio).")
+        out.append("torch: não importável (ainda a instalar, venv vazio, ou instalação a meio).")
         return out
 
     out.append(f"torch.__version__: {torch.__version__}")
@@ -125,6 +146,10 @@ def torch_block() -> list[str]:
 def env_block() -> list[str]:
     out = ["--- ambiente ---" ]
     out.append(f"quando: {datetime.now(timezone.utc).astimezone().isoformat()}")
+    out.append(f"diretório corrente: {os.getcwd()}")
+    ve = os.environ.get("VIRTUAL_ENV")
+    if ve:
+        out.append(f"VIRTUAL_ENV: {ve}  (venv na raiz do clone: …/treinamento_llms/.venv-trein — não fica em trein/)")
     out.append(f"python: {sys.executable} — {sys.version.split()[0]}")
     if shutil.which("pip"):
         try:
@@ -141,19 +166,16 @@ def env_block() -> list[str]:
     return out
 
 
-def pip_nvidia_sanity() -> list[str]:
-    out = ["--- pacotes nvidia* em pip (se instalados) ---"]
-    try:
-        r = subprocess.run(  # noqa: S603
-            [sys.executable, "-m", "pip", "list", "--format=freeze"],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-    except (FileNotFoundError, subprocess.SubprocessError):
+def pip_nvidia_sanity(freeze: str | None = None) -> list[str]:
+    out = ["--- pacotes nvidia* / torch (pip) ---"]
+    if freeze is None:
+        rtxt = _pip_freeze()
+    else:
+        rtxt = freeze
+    if not rtxt.strip():
         out.append("(pip list falhou.)")
         return out
-    lines = [l for l in (r.stdout or "").splitlines() if "nvidia" in l.lower() or l.startswith("torch")]
+    lines = [l for l in rtxt.splitlines() if "nvidia" in l.lower() or l.startswith("torch")]
     if not lines:
         out.append("(nenhum pacote cujo nome contenha nvidia, ou ainda vazio)")
     else:
@@ -162,6 +184,42 @@ def pip_nvidia_sanity() -> list[str]:
         if len(lines) > 40:
             out.append(f"... (+{len(lines) - 40} linhas)")
     return out
+
+
+def partial_install_block(freeze: str) -> list[str]:
+    """Estado comum: pip instalou muitas dependências nvidia-* e a seguir a instalação parou (SIGKILL, OOM, Ctrl+C) antes de torch/."""
+    if not _torch_import_ok() and not any(
+        l.strip().startswith("torch==") for l in freeze.splitlines()
+    ):
+        nvidia_guess = [l for l in freeze.splitlines() if l.strip().startswith("nvidia-")]
+        if nvidia_guess:
+            return [
+                "!!! AVISO: instalação a meio (dependências CUDA em pip, mas sem pacote 'torch' / import).",
+                "    Isto costuma acontecer se o processo morreu na fase 'Installing collected packages' (memória, tempo, interrupção).",
+                "    O teu driver (CUDA 13.0) combina com a stack nvidia-*-cu13 que já está no venv; faltam o wheel do PyTorch e o resto (transformers, …).",
+                "    Recuperação neste venv (mantém a stack cu13 que já baixou):",
+                "      pip install 'torch>=2.1' && pip install -r trein/requirements.txt  # 2.º comando pula/actualiza o resto",
+                "    Ou, em comandos mínimos:  pip install 'torch>=2.1'  e depois o que faltar (transformers, datasets, trl, …) — ver trein/requirements.txt",
+                "    Cuidado: trein/treina.sh (passo 1) por defeito usa o índice PyTorch *cu124*; num venv que já tem nvidia-*-cu13, podes trocar muita coisa. Para treinar já neste venv, usa o pip com PyPI (como acima) ou apaga o venv e recomeça:  rm -rf .venv-trein  &&  ./trein/treina.sh",
+                "",
+            ]
+    return []
+
+
+def slow_torch_wheel_tips() -> list[str]:
+    """Ajudar quem fica muito tempo em 'Installing torch' (ficheiro .whl ~0.5GB)."""
+    if _torch_import_ok():
+        return []
+    return [
+        "--- se travas em 'Installing collected packages: torch' ---",
+        "O wheel pesa centenas de MB: o pip está a *descomprimir* milhares de ficheiros para .venv. Em disco de rede, overlay Docker ou cota, pode levar 15-45+ min e parece parado — verifica com outro shell:",
+        "  df -h /workspace  (e o filesystem do .venv; precisas de vários GB livres; se /tmp for pequeno: export TMPDIR=/workspace/_pip_tmp; mkdir -p $TMPDIR )",
+        "  ps aux | grep pip   (processo a correr?),   iotop   ou  dstat  (disco a trabalhar?)",
+        "  TREIN_PIP_VERBOSE=1  ./trein/treina.sh  ou:  pip install -v 'torch>=2.1'  (vês progresso de fase)",
+        "Bash: se aparece 'Stopped' + '[N]+' no job, usaste Ctrl+Z (suspende o pip).  fg  para retomar, ou  kill %N  e instala de novo; não deixes o job 'Stopped' a ocupar ficheiros a meio.",
+        "Não interrompas ao primeiro minuto; só cancela se df estiver 100% cheio, OOM, ou 0% I/O de horas a fio.",
+        "",
+    ]
 
 
 def hf_block() -> list[str]:
@@ -176,6 +234,7 @@ def hf_block() -> list[str]:
 
 
 def run(out_f: TextIO | None) -> int:
+    freeze = _pip_freeze()
     lines: list[str] = []
     lines.extend(env_block())
     lines.append("")
@@ -183,7 +242,11 @@ def run(out_f: TextIO | None) -> int:
     lines.append("")
     lines.extend(torch_block())
     lines.append("")
-    lines.extend(pip_nvidia_sanity())
+    extra = partial_install_block(freeze)
+    if extra:
+        lines.extend(extra)
+    lines.extend(slow_torch_wheel_tips())
+    lines.extend(pip_nvidia_sanity(freeze))
     lines.append("")
     lines.extend(hf_block())
 
