@@ -8,7 +8,7 @@ Copia `server/.env.example` para **`server/.env`** e preenche `ORACULO_PG_*` (e 
 
 ## O que precisas antes
 
-1. **Raiz do projeto** — a pasta *pai* desta (`server/`), com `server/requirements.txt` (e opcionalmente `requirements.txt` na raiz que junta treino+servidor), `trein/data_config.py` (config partilhada) e `server/lora_engine.py`.
+1. **Raiz do projeto** — a pasta *pai* desta (`server/`), com `server/requirements.txt` (e opcionalmente `requirements.txt` na raiz que junta treino+servidor), `trein/data_config.py` (config partilhada), `server/lora_engine.py` e `model_service/` (inferência + API `/v1` OpenAI-compat).
 
 2. **Treino concluído** — normalmente existirá `trein/outputs/lora_adapter/` com o adapter gerado pelo `trein/train_lora.py` (ou um modelo fundido em `trein/outputs/merged_model/` após o `trein/merge_lora.py`).
 
@@ -128,6 +128,10 @@ curl -s http://127.0.0.1:8765/api/chat \
 ```
 
 - **Chat em streaming (SSE)** — `POST http://127.0.0.1:8765/api/chat/stream` com o **mesmo JSON** que `/api/chat`. A resposta é `text/event-stream`: linhas `data: {"delta":"..."}` com pedaços do texto à medida que o modelo gera, e por fim `data: [DONE]`. A página `static/index.html` usa este endpoint para ir mostrando a resposta em tempo real.
+
+- **OpenAI-compat** — `POST /v1/chat/completions`, `GET /v1/models` (subconjunto útil para clientes com `base_url` apontando para `http://<host>:<porta>/v1`). Corpo e resposta seguem o formato habitual (`messages`, `max_tokens`, `stream`, `choices`, `usage`, etc.). Ferramentas / `tool` roles não estão implementadas.  
+  - Se definires **`ORACULO_OPENAI_API_KEY`** em `server/.env`, todos os pedidos a `/v1/*` devem enviar `Authorization: Bearer <essa chave>`. Sem a variável, `/v1/*` aceita pedidos **sem** Bearer (só em rede confiável).  
+  - O motor partilhado com estas rotas está no pacote **`model_service/`** (raiz do repo); este diretório `server/` continua a ser a camada web (FastAPI, auth, estáticos).
 
 ## Memória e desempenho
 

@@ -11,6 +11,9 @@ Só interface (auth + estáticos, **sem** carregar o modelo): --ui-only ou ORACU
 
 Por defeito escuta em 0.0.0.0 (todas as interfaces): aceda com http://IP-DO-SERVIDOR:8765/
 Nesta máquina: http://127.0.0.1:8765/ — só local: --host 127.0.0.1
+
+API compatível com OpenAI: POST /v1/chat/completions e GET /v1/models (ver server/README.md).
+A lógica de inferência está em model_service/ na raiz do repositório.
 """
 
 from __future__ import annotations
@@ -24,14 +27,14 @@ import re
 import secrets
 import sys
 import threading
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
 
 _SERVER_DIR = Path(__file__).resolve().parent
 _PROJECT_ROOT = _SERVER_DIR.parent
 _TREIN_DIR = _PROJECT_ROOT / "trein"
-for _p in (_TREIN_DIR, _SERVER_DIR):
+for _p in (_PROJECT_ROOT, _TREIN_DIR, _SERVER_DIR):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
@@ -58,6 +61,9 @@ apply_loading_progress_env()
 
 if not os.environ.get("PYTORCH_ALLOC_CONF"):
     os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
+
+from model_service.openai_routes import router as openai_router
+from model_service.runtime import get_runtime
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -95,28 +101,11 @@ from chat_sessions_db import (
 
 STATIC_DIR = _SERVER_DIR / "static"
 
-_gen_lock = threading.Lock()
-_active_gen_uid_lock = threading.Lock()
-_active_generation_user_id: int | None = None
 _user_presence_lock = threading.Lock()
 _user_presence: dict[int, float] = {}
 PRESENCE_ONLINE_S = 300.0
 
 
-@contextmanager
-def _gen_lock_tracked(user_id: int | None) -> Any:
-    """Envolve o lock global de geração e regista o utilizador que detém a inferência (UI de «servidor ocupado»)."""
-    global _active_generation_user_id
-    with _active_gen_uid_lock:
-        _active_generation_user_id = user_id
-    try:
-        with _gen_lock:
-            yield
-    finally:
-        with _active_gen_uid_lock:
-            _active_generation_user_id = None
-_engine: dict | None = None
-_ui_only: bool = False
 _startup_args: argparse.Namespace | None = None
 
 
@@ -193,6 +182,17 @@ def _parse_args() -> argparse.Namespace:
     return args
 
 
+def _openai_key_configured() -> bool:
+    return bool((os.environ.get("ORACULO_OPENAI_API_KEY") or "").strip())
+
+
+def _model_unavailable_detail() -> str:
+    rt = get_runtime()
+    if rt.ui_only:
+        return "Modo --ui-only (sem modelo). Suba o servidor sem --ui-only para o chat."
+    return "Modelo ainda não carregado."
+
+
 def _resolve_merged_path(cli_path: Path | None) -> Path | None:
     if cli_path is not None:
         return cli_path
@@ -231,7 +231,7 @@ def _print_pg_ligação_falhou(err: BaseException) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _engine, _ui_only
+    rt = get_runtime()
     try:
         init_db()
     except Exception as err:
@@ -240,8 +240,7 @@ async def lifespan(app: FastAPI):
     print("Base de utilizadores e sessões de chat: pronta.", flush=True)
     args = _startup_args if _startup_args is not None else _parse_args()
     if args.ui_only:
-        _ui_only = True
-        _engine = None
+        rt.set_ui_only()
         print("Modo --ui-only: interface e API de auth; modelo não carregado.", flush=True)
         if args.host in ("0.0.0.0", "::", "[::]"):
             print(
@@ -252,26 +251,23 @@ async def lifespan(app: FastAPI):
         else:
             print(f"Pronto. Servidor em http://{args.host}:{args.port}/", flush=True)
         yield
-        _ui_only = False
+        rt.ui_only = False
         return
 
-    _ui_only = False
-    from lora_engine import load_lora_pipeline
-
+    rt.ui_only = False
     merged = _resolve_merged_path(args.merged_model_dir)
     print("A carregar modelo (só uma vez; pode demorar)…", flush=True)
     try:
-        tokenizer, model = load_lora_pipeline(
+        rt.load(
             args.model_name,
             args.adapter_dir,
             merged,
             trust_remote_code=args.trust_remote_code,
-            fix_generation_max_length=True,
         )
     except Exception as err:
         print(f"Erro ao carregar: {err}", file=sys.stderr, flush=True)
         raise
-    mode = "fundido" if merged else "base+LoRA"
+    mode = rt.mode
     if args.host in ("0.0.0.0", "::", "[::]"):
         print(
             f"Pronto ({mode}). À escuta em {args.host}:{args.port} — nesta máquina: "
@@ -280,14 +276,18 @@ async def lifespan(app: FastAPI):
         )
     else:
         print(f"Pronto ({mode}). Servidor em http://{args.host}:{args.port}/", flush=True)
-    _engine = {
-        "tokenizer": tokenizer,
-        "model": model,
-        "mode": mode,
-        "model_name": args.model_name,
-    }
+    if _openai_key_configured():
+        print(
+            "API OpenAI-compat: POST /v1/chat/completions (Authorization: Bearer <ORACULO_OPENAI_API_KEY>).",
+            flush=True,
+        )
+    else:
+        print(
+            "API OpenAI-compat: POST /v1/chat/completions (sem ORACULO_OPENAI_API_KEY — só use em rede confiável).",
+            flush=True,
+        )
     yield
-    _engine = None
+    rt.clear()
 
 
 app = FastAPI(title="Oráculo LoRA local", lifespan=lifespan)
@@ -306,6 +306,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(openai_router)
 
 
 class Message(BaseModel):
@@ -610,12 +612,12 @@ def _fallback_title_from_user_line(user_line: str) -> str:
 def _title_after_turn(user_id: int, session_id: int, last_user: str, assistant: str) -> None:
     if not should_generate_title(user_id, session_id):
         return
-    if _ui_only or _engine is None:
+    rt = get_runtime()
+    if rt.ui_only or not rt.is_loaded:
         set_session_title_from_model(
             user_id, session_id, _fallback_title_from_user_line(last_user)
         )
         return
-    from lora_engine import generate_chat_reply
 
     tmsgs: list[dict] = [
         {
@@ -628,47 +630,19 @@ def _title_after_turn(user_id: int, session_id: int, last_user: str, assistant: 
             ),
         }
     ]
-    with _gen_lock_tracked(int(user_id)):
-        if _engine is None:
-            set_session_title_from_model(
-                user_id, session_id, _fallback_title_from_user_line(last_user)
-            )
-            return
-        try:
-            raw = generate_chat_reply(
-                _engine["tokenizer"],
-                _engine["model"],
-                tmsgs,
-                max_new_tokens=64,
-                temperature=0.4,
-                top_p=0.9,
-            )
-        except Exception:
-            raw = ""
+    try:
+        raw = rt.generate(
+            tmsgs,
+            max_new_tokens=64,
+            temperature=0.4,
+            top_p=0.9,
+            user_id=int(user_id),
+        )
+    except Exception:
+        raw = ""
     title = _clean_title_text(raw) or _fallback_title_from_user_line(last_user)
     if title and should_generate_title(user_id, session_id):
         set_session_title_from_model(user_id, session_id, title)
-
-
-def _run_generate(
-    messages: list[dict],
-    max_new_tokens: int,
-    temperature: float,
-    top_p: float,
-) -> str:
-    from lora_engine import generate_chat_reply
-
-    assert _engine is not None
-    tokenizer = _engine["tokenizer"]
-    model = _engine["model"]
-    return generate_chat_reply(
-        tokenizer,
-        model,
-        messages,
-        max_new_tokens=max_new_tokens,
-        temperature=temperature,
-        top_p=top_p,
-    )
 
 
 def _run_generate_locked(
@@ -678,8 +652,14 @@ def _run_generate_locked(
     top_p: float,
     user_id: int | None = None,
 ) -> str:
-    with _gen_lock_tracked(user_id):
-        return _run_generate(messages, max_new_tokens, temperature, top_p)
+    rt = get_runtime()
+    return rt.generate(
+        messages,
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+        top_p=top_p,
+        user_id=user_id,
+    )
 
 
 def _sse_stream_locked(
@@ -690,25 +670,19 @@ def _sse_stream_locked(
     top_p: float,
     cancel_event: threading.Event,
 ):
-    from lora_engine import generate_chat_reply_stream
-
-    assert _engine is not None
-    tokenizer = _engine["tokenizer"]
-    model = _engine["model"]
-    with _gen_lock_tracked(int(user_id)):
-        for delta in generate_chat_reply_stream(
-            tokenizer,
-            model,
-            messages,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            cancel_event=cancel_event,
-        ):
-            line = json.dumps({"delta": delta}, ensure_ascii=False)
-            yield f"data: {line}\n\n".encode("utf-8")
-        if not cancel_event.is_set():
-            yield b"data: [DONE]\n\n"
+    rt = get_runtime()
+    for delta in rt.stream(
+        messages,
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+        top_p=top_p,
+        cancel_event=cancel_event,
+        user_id=int(user_id),
+    ):
+        line = json.dumps({"delta": delta}, ensure_ascii=False)
+        yield f"data: {line}\n\n".encode("utf-8")
+    if not cancel_event.is_set():
+        yield b"data: [DONE]\n\n"
 
 
 def _prune_completed_jobs_if_needed() -> None:
@@ -736,35 +710,31 @@ def _job_worker(
     session_id: int | None = None,
     user_id: int | None = None,
 ) -> None:
-    from lora_engine import generate_chat_reply_stream
-
-    assert _engine is not None
+    rt = get_runtime()
+    assert rt.is_loaded
     with _jobs_lock:
         st = _jobs.get(job_id)
     if not st:
         return
     cancel_event: threading.Event = st["cancel_event"]
-    tokenizer = _engine["tokenizer"]
-    model = _engine["model"]
+    tokenizer = rt.tokenizer
     try:
         t0: float
         t1: float
-        with _gen_lock_tracked((int(user_id) if user_id is not None else None)):
-            t0 = time.perf_counter()
-            for delta in generate_chat_reply_stream(
-                tokenizer,
-                model,
-                messages,
-                max_new_tokens=max_new_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                cancel_event=cancel_event,
-            ):
-                with _jobs_lock:
-                    if job_id not in _jobs:
-                        return
-                    _jobs[job_id]["text"] += delta
-            t1 = time.perf_counter()
+        t0 = time.perf_counter()
+        for delta in rt.stream(
+            messages,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            cancel_event=cancel_event,
+            user_id=(int(user_id) if user_id is not None else None),
+        ):
+            with _jobs_lock:
+                if job_id not in _jobs:
+                    return
+                _jobs[job_id]["text"] += delta
+        t1 = time.perf_counter()
         with _jobs_lock:
             if job_id not in _jobs:
                 return
@@ -916,16 +886,7 @@ async def serve_app_js_legacy():
 
 @app.get("/api/status")
 async def status(_uid: UserIdDep):
-    if _ui_only:
-        return {"loaded": False, "ui_only": True}
-    if _engine is None:
-        return {"loaded": False, "ui_only": False}
-    return {
-        "loaded": True,
-        "ui_only": False,
-        "mode": _engine["mode"],
-        "model_name": _engine["model_name"],
-    }
+    return get_runtime().status_public()
 
 
 @app.get("/api/admin/users")
@@ -933,8 +894,7 @@ async def api_admin_list_users(_admin: AdminIdDep) -> dict[str, list]:
     now = time.time()
     with _user_presence_lock:
         pres = dict(_user_presence)
-    with _active_gen_uid_lock:
-        gen_uid = _active_generation_user_id
+    gen_uid = get_runtime().active_generation_user_id
     users = list_all_users()
     out: list[dict[str, Any]] = []
     for u in users:
@@ -983,11 +943,11 @@ async def api_chat_generation_status(_uid: UserIdDep) -> dict[str, bool]:
     """
     Se `active` e não `yours`, outro utilizador detém a inferência (fila de um pedido de cada vez).
     """
-    if _ui_only or _engine is None:
+    rt = get_runtime()
+    if rt.ui_only or not rt.is_loaded:
         return {"active": False, "yours": False}
     uid = int(_uid)
-    with _active_gen_uid_lock:
-        holder = _active_generation_user_id
+    holder = rt.active_generation_user_id
     if holder is None:
         return {"active": False, "yours": False}
     return {"active": True, "yours": holder == uid}
@@ -995,11 +955,8 @@ async def api_chat_generation_status(_uid: UserIdDep) -> dict[str, bool]:
 
 @app.post("/api/chat", response_model=ChatOut)
 async def chat(_uid: UserIdDep, body: ChatIn):
-    if _engine is None:
-        d = "Modo --ui-only (sem modelo). Suba o servidor sem --ui-only para o chat."
-        if not _ui_only:
-            d = "Modelo ainda não carregado."
-        raise HTTPException(status_code=503, detail=d)
+    if not get_runtime().is_loaded:
+        raise HTTPException(status_code=503, detail=_model_unavailable_detail())
     base = [{"role": m.role, "content": m.content} for m in body.messages]
     for m in base:
         if m["role"] not in ("user", "assistant", "system"):
@@ -1024,11 +981,8 @@ async def chat(_uid: UserIdDep, body: ChatIn):
 
 @app.post("/api/chat/stream")
 async def chat_stream(request: Request, body: ChatIn, _uid: UserIdDep):
-    if _engine is None:
-        d = "Modo --ui-only (sem modelo). Suba o servidor sem --ui-only para o chat."
-        if not _ui_only:
-            d = "Modelo ainda não carregado."
-        raise HTTPException(status_code=503, detail=d)
+    if not get_runtime().is_loaded:
+        raise HTTPException(status_code=503, detail=_model_unavailable_detail())
     base = [{"role": m.role, "content": m.content} for m in body.messages]
     for m in base:
         if m["role"] not in ("user", "assistant", "system"):
@@ -1106,11 +1060,8 @@ async def api_delete_session(_uid: UserIdDep, session_id: int):
 @app.post("/api/chat/jobs", response_model=JobCreateOut)
 async def create_chat_job(_uid: UserIdDep, body: ChatJobIn):
     """Inicia geração em background; o cliente consulta com GET /api/chat/jobs/{id} (polling)."""
-    if _engine is None:
-        d = "Modo --ui-only (sem modelo). Suba o servidor sem --ui-only para o chat."
-        if not _ui_only:
-            d = "Modelo ainda não carregado."
-        raise HTTPException(status_code=503, detail=d)
+    if not get_runtime().is_loaded:
+        raise HTTPException(status_code=503, detail=_model_unavailable_detail())
     if body.session_id is not None:
         if get_session_messages(int(_uid), body.session_id) is None:
             raise HTTPException(status_code=404, detail="Sessão não encontrada.")
