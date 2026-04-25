@@ -3,6 +3,8 @@
 # (a partir da raiz do repositório; em CI podes apontar o caminho absoluto deste ficheiro)
 # O ficheiro antigo da raiz juntava isto *e* o servidor: este é mais *leve* (sem FastAPI/Postgres);
 # a parte pesada (torch+CUDA) é a mesma. treina.sh usa o venv .venv-trein por defeito.
+# Por defeito, treina.sh instala torch a partir de cu124 (PyTorch.org), não o stack cu13 puro
+# do PyPI — costuma puxar menos nvidia-*. TREIN_PIP_UNIFIED=1 volta ao "pip -r" único.
 #
 # Git (CLI) — não é pacote pip; instale no sistema.
 #

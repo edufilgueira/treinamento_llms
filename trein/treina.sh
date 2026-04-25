@@ -32,12 +32,26 @@ fi
 # shellcheck source=/dev/null
 source "$VENV_DIR/bin/activate"
 
+REPO_LOG_TS="${REPO_LOG_TS:-$(date +%Y%m%d_%H%M%S)}"
+REPO_LOG_DIR="${REPO_LOG_DIR:-$REPO_ROOT/trein/logs}"
+mkdir -p "$REPO_LOG_DIR"
+
+# Diagnóstico: driver, CUDA, pip/torch (útil a comparar "antes" vs "depois" do pip)
+# TREIN_NO_DIAG=1 desactiva. REPO_LOG_DIR / REPO_LOG_TS definem pasta e sufixo dos ficheiros.
+_run_diag() {
+    [ "${TREIN_NO_DIAG:-0}" = "1" ] && return 0
+    local out="$1"
+    python3 "$REPO_ROOT/trein/verificar_ambiente.py" -o "$out"
+    echo "Diagnóstico gravado: $out"
+}
+
 export PIP_DEFAULT_TIMEOUT="${PIP_DEFAULT_TIMEOUT:-120}"
 PIP_EXTR=()
 [ "${TREIN_PIP_VERBOSE:-0}" = "1" ] && PIP_EXTR=(-v)
 
 # Instala dependências se faltar qualquer pacote do treino (não só torch)
 if ! python3 -c "import torch, datasets, peft, trl, transformers" 2>/dev/null; then
+    _run_diag "$REPO_LOG_DIR/ambiente_${REPO_LOG_TS}_1_antes_pip.log"
     echo "Instalando dependências (venv: $VENV_DIR)..."
     if [ "${USE_CPU_TORCH:-0}" = "1" ]; then
         echo "USE_CPU_TORCH=1: PyTorch CPU-only (sem nvidia-*)."
@@ -46,10 +60,35 @@ if ! python3 -c "import torch, datasets, peft, trl, transformers" 2>/dev/null; t
         if [ "${#_rest[@]}" -gt 0 ]; then
             pip install "${PIP_EXTR[@]}" "${_rest[@]}"
         fi
-    else
+    elif [ "${TREIN_PIP_UNIFIED:-0}" = "1" ]; then
+        # Um único "pip install -r" — o PyPI escolhe torch com stack CUDA (hoje: muitas deps nvidia-*-cu13).
+        echo "TREIN_PIP_UNIFIED=1: instalação monolítica a partir de trein/requirements.txt (comportamento clássico)."
         echo "Dica: TREIN_PIP_VERBOSE=1 mostra o pip a processar pacote a pacote."
         pip install "${PIP_EXTR[@]}" -r trein/requirements.txt
+    else
+        # Dois passos: torch do índice PyTorch (CUDA 12.x) evita, em geral, a avalanche de
+        # pacotes nvidia-*-cu13 do PyPI, e vês a linha "Step 1/2" a fechar antes do HF stack.
+        TREIN_TORCH_INDEX="${TREIN_TORCH_INDEX:-https://download.pytorch.org/whl/cu124}"
+        _torch_line="$(grep -E '^torch[>=<~!]' trein/requirements.txt | head -1)"
+        if [ -z "$_torch_line" ]; then
+            _torch_line="torch>=2.1.0"
+        fi
+        echo "Passo 1/2: PyTorch para GPU a partir de $TREIN_TORCH_INDEX (pode demorar vários minutos no disco)..."
+        echo "        Se precisas do torch tal como o PyPI oferece (ex.: CUDA 13): TREIN_PIP_UNIFIED=1"
+        echo "        Outro índice (cu121, etc.): TREIN_TORCH_INDEX=https://download.pytorch.org/whl/cu121"
+        pip install "${PIP_EXTR[@]}" \
+            --index-url "$TREIN_TORCH_INDEX" \
+            --extra-index-url "https://pypi.org/simple" \
+            "$_torch_line"
+        mapfile -t _rest < <(grep -vE '^(#|$)' trein/requirements.txt | grep -v '^torch' || true)
+        if [ "${#_rest[@]}" -gt 0 ]; then
+            echo "Passo 2/2: transformers, datasets, trl, …"
+            pip install "${PIP_EXTR[@]}" "${_rest[@]}"
+        fi
     fi
+    _run_diag "$REPO_LOG_DIR/ambiente_${REPO_LOG_TS}_2_apos_pip.log"
+else
+    _run_diag "$REPO_LOG_DIR/ambiente_${REPO_LOG_TS}_venv_ok.log"
 fi
 
 # Roda o treino (a partir da raiz do repositório)
