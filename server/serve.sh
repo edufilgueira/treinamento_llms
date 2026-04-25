@@ -20,4 +20,4 @@ if ! python3 -c "import torch, transformers, peft, accelerate, fastapi, uvicorn,
     pip install -r server/requirements.txt
 fi
 
-exec python3 "$SCRIPT_DIR/serve_lora.py --inference-backend gguf --gguf-path ../tools/quantized_model/Merged_Model-3.1B-Q4_K_M.gguf" "$@"
+exec python3 "$SCRIPT_DIR/serve_lora.py" --inference-backend gguf --gguf-path "$SCRIPT_DIR/../tools/quantized_model/Merged_Model-3.1B-Q4_K_M.gguf" "$@"
