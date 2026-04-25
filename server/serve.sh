@@ -22,5 +22,6 @@ fi
 
 # SERVIDOR QUANTIZADO
 # exec python3 "$SCRIPT_DIR/serve_lora.py" --inference-backend gguf --gguf-path "$SCRIPT_DIR/../tools/quantized_model/Merged_Model-3.1B-Q5_K_M.gguf" "$@"
-# MODELO SEM LORA
-python3 server/serve_lora.py --base-only --model_name Qwen/Qwen3-8B --trust_remote_code
+# MODELO SEM LORA (Qwen3-8B) 16,4GB
+# python3 server/serve_lora.py --base-only --model_name Qwen/Qwen3-8B --trust_remote_code 
+python3 server/serve_lora.py --base-only --model_name TheBloke/Mistral-7B-Instruct-v0.3-GGUF --trust_remote_code 
