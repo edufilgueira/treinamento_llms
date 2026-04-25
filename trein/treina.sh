@@ -84,16 +84,21 @@ if ! python3 -c "import torch, datasets, peft, trl, transformers" 2>/dev/null; t
         echo "Dica: TREIN_PIP_VERBOSE=1 mostra o pip a processar pacote a pacote."
         pip install "${PIP_EXTR[@]}" -r trein/requirements.txt
     else
-        # Dois passos: torch do índice PyTorch (CUDA 12.x) evita, em geral, a avalanche de
-        # pacotes nvidia-*-cu13 do PyPI, e vês a linha "Step 1/2" a fechar antes do HF stack.
+        # Dois passos: torch do índice PyTorch. Nota: torch 2.11+ ainda puxa cuda-toolkit 13.0.2
+        # (muitas nvidia-*, enorme). trein/requirements.txt limita a <2.11 por defeito; para
+        # instalar 2.11+:  TREIN_TORCH_ALLOW_211=1
         TREIN_TORCH_INDEX="${TREIN_TORCH_INDEX:-https://download.pytorch.org/whl/cu124}"
         _torch_line="$(grep -E '^torch[>=<~!]' trein/requirements.txt | head -1)"
         if [ -z "$_torch_line" ]; then
-            _torch_line="torch>=2.1.0"
+            _torch_line="torch>=2.1.0,<2.11.0"
         fi
-        echo "Passo 1/2: PyTorch para GPU a partir de $TREIN_TORCH_INDEX (pode demorar vários minutos no disco)..."
-        echo "        Se precisas do torch tal como o PyPI oferece (ex.: CUDA 13): TREIN_PIP_UNIFIED=1"
-        echo "        Outro índice (cu121, etc.): TREIN_TORCH_INDEX=https://download.pytorch.org/whl/cu121"
+        if [ "${TREIN_TORCH_ALLOW_211:-0}" = "1" ]; then
+            _torch_line="torch>=2.1.0"
+            echo "TREIN_TORCH_ALLOW_211=1: sem limite <2.11 — torch 2.11+ puxa stack CUDA 13.0.2 (GB de wheels + I/O longo no /workspace)."
+        fi
+        echo "Passo 1/2: PyTorch para GPU a partir de $TREIN_TORCH_INDEX (o wheel do torch + deps leva muito I/O)..."
+        echo "        2.11+ puxa ainda o metapacote cuda 13.0.2. Por defeito usamos tecto <2.11 em trein/requirements.txt (ou ajusta TREIN_TORCH_ALLOW_211)."
+        echo "        Tudo a partir de PyPI (sem passo1 cu124):  TREIN_PIP_UNIFIED=1  |  outro índice:  TREIN_TORCH_INDEX=https://download.pytorch.org/whl/cu121"
         pip install "${PIP_EXTR[@]}" \
             --index-url "$TREIN_TORCH_INDEX" \
             --extra-index-url "https://pypi.org/simple" \

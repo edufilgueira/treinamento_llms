@@ -108,14 +108,18 @@ def torch_block() -> list[str]:
     out: list[str] = ["--- PyTorch (wheel em uso) ---"]
     try:
         import torch
-    except (ImportError, OSError) as e:
-        out.append("torch: não importa correctamente (instalação incompleta, interrompida, ou ficheiros .so em falta).")
+    except ModuleNotFoundError:
+        out.append("torch: ainda não instalado (venv novo / pip ainda a correr).")
+        return out
+    except OSError as e:
+        out.append("torch: pacote partido (falta .so) — comum se o pip parou a meio de 'Installing torch'.")
         out.append(f"  detalhe: {e!s}")
-        if "libtorch" in str(e) or "shared object" in str(e) or "No such file" in str(e):
-            out.append("  (típico: pip a meio de 'Installing torch' foi parado com Ctrl+Z, SIGKILL, ou quota/disco; o pacote fica partido no site-packages).")
         out.append("  repara:  pip uninstall -y torch")
         out.append("          export TMPDIR=/workspace/_pip_tmp; mkdir -p $TMPDIR")
-        out.append("          pip install --no-cache-dir 'torch>=2.1'")
+        out.append("          pip install --no-cache-dir -r trein/requirements.txt")
+        return out
+    except ImportError as e:
+        out.append(f"torch: ImportError: {e!s}")
         return out
 
     out.append(f"torch.__version__: {torch.__version__}")
