@@ -98,7 +98,12 @@ Rodar conversão **com o caminho que tiveres** (merge **ou** pasta descarregada 
 python convert_hf_to_gguf.py ../../trein/outputs/merged_model
 ```
 
-(Em versões recentes, o script pode viver em `tools/`; usa o path que a tua árvore do llama.cpp tiver, como na secção acima.)
+```bash
+python3 convert_hf_to_gguf.py \
+  ~/.cache/huggingface/hub/models--mistralai--Mistral-7B-v0.3/snapshots/caa1feb0e54d415e2df31207e5f4e273e33509b1 \
+  --outfile ~/treinamento_llms/trein/outputs/merged_mistral-7b-f16.gguf \
+  --outtype f16
+```
 
 ---
 
@@ -170,6 +175,11 @@ Rodar:
 ./build/bin/llama-quantize \
 ../quantized_model/Merged_Model-3.1B-BF16.gguf \
 ../quantized_model/Merged_Model-3.1B-Q4_K_M.gguf \
+Q4_K_M
+
+./build/bin/llama-quantize \
+../quantized_model/mistral-7b-f16.gguf.gguf \
+../quantized_model/mistral-7b-f16.gguf-Q4_K_M.gguf \
 Q4_K_M
 ```
 
