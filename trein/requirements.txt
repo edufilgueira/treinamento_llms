@@ -1,6 +1,8 @@
 # Treino e utilitários (train_lora, merge_lora, inferir, build_snapshot, verificar_ambiente)
 # Sem API nem PostgreSQL. Instale com: pip install -r trein/requirements.txt
 # (a partir da raiz do repositório; em CI podes apontar o caminho absoluto deste ficheiro)
+# O ficheiro antigo da raiz juntava isto *e* o servidor: este é mais *leve* (sem FastAPI/Postgres);
+# a parte pesada (torch+CUDA) é a mesma. treina.sh usa o venv .venv-trein por defeito.
 #
 # Git (CLI) — não é pacote pip; instale no sistema.
 #
