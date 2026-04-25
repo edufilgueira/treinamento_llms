@@ -6,10 +6,11 @@ Pacote com o **runtime de inferência** (carregar modelo uma vez, gerar texto, f
 
 | Ficheiro | Função |
 |----------|--------|
-| `runtime.py` | `ModelRuntime` + `get_runtime()`: `load()`, `generate()`, `stream()`, lock de um pedido de geração de cada vez. |
+| `runtime.py` | `ModelRuntime` + `get_runtime()`: `load()` / `load_gguf()`, `generate()`, `stream()`, lock de um pedido de geração de cada vez. |
+| `gguf_engine.py` | Carga e *chat* com ficheiro `.gguf` via `llama-cpp-python` (quando `ORACULO_INFERENCE_BACKEND=gguf`). |
 | `openai_routes.py` | Router FastAPI com prefixo `/v1`: chat completions e listagem de modelos. |
 
-A implementação de baixo nível (`transformers`, streaming, LoRA) continua em `server/lora_engine.py`.
+A implementação de baixo nível com **HuggingFace** (streaming, LoRA) continua em `server/lora_engine.py`. O modo **GGUF** não usa esse ficheiro; ver [server/README_INFERENCE_HF_GGUF.md](../server/README_INFERENCE_HF_GGUF.md).
 
 ## Quem precisa desta API
 

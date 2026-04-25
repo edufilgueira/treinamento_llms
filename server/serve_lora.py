@@ -52,6 +52,7 @@ _load_dotenv_early()
 
 from data_config import (
     DEFAULT_ADAPTER_DIR,
+    DEFAULT_GGUF_PATH,
     DEFAULT_MERGED_MODEL_DIR,
     DEFAULT_MODEL_NAME,
     apply_loading_progress_env,
@@ -161,7 +162,22 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help=f"Se existir com config.json, carrega só o modelo fundido (merge_lora.py). "
-        f"Padrão: tentar {DEFAULT_MERGED_MODEL_DIR} se existir.",
+        f"Padrão: tentar {DEFAULT_MERGED_MODEL_DIR} se existir. Ignorado com --inference-backend gguf.",
+    )
+    p.add_argument(
+        "--inference-backend",
+        type=str,
+        default=None,
+        choices=["hf", "gguf"],
+        help="hf = PyTorch+Transformers (adapter/merge); gguf = ficheiro .gguf (llama-cpp-python). "
+        "Também: ORACULO_INFERENCE_BACKEND. Ver server/README_INFERENCE_HF_GGUF.md.",
+    )
+    p.add_argument(
+        "--gguf-path",
+        type=Path,
+        default=None,
+        help="Caminho absoluto/relatório ao ficheiro .gguf. Senão: ORACULO_GGUF_PATH "
+        f"ou, se existir, {DEFAULT_GGUF_PATH}.",
     )
     p.add_argument("--trust_remote_code", action="store_true")
     p.add_argument(
@@ -179,6 +195,12 @@ def _parse_args() -> argparse.Namespace:
     args.adapter_dir = args.adapter_dir.resolve()
     if args.merged_model_dir is not None:
         args.merged_model_dir = Path(args.merged_model_dir).expanduser().resolve()
+    if args.gguf_path is not None:
+        args.gguf_path = Path(args.gguf_path).expanduser().resolve()
+    ib = args.inference_backend
+    if ib is None:
+        ib = _inference_backend_from_env()
+    args.inference_backend = ib
     return args
 
 
@@ -203,6 +225,27 @@ def _resolve_merged_path(cli_path: Path | None) -> Path | None:
             return p
     if DEFAULT_MERGED_MODEL_DIR.is_dir() and (DEFAULT_MERGED_MODEL_DIR / "config.json").is_file():
         return DEFAULT_MERGED_MODEL_DIR
+    return None
+
+
+def _inference_backend_from_env() -> str:
+    v = (os.environ.get("ORACULO_INFERENCE_BACKEND") or "hf").strip().lower()
+    if v in ("gguf", "hf"):
+        return v
+    return "hf"
+
+
+def _resolve_gguf_path(cli_path: Path | None) -> Path | None:
+    if cli_path is not None:
+        p = cli_path.expanduser().resolve()
+        return p if p.is_file() else None
+    env_p = (os.environ.get("ORACULO_GGUF_PATH") or "").strip()
+    if env_p:
+        p = Path(env_p).expanduser().resolve()
+        if p.is_file():
+            return p
+    if DEFAULT_GGUF_PATH.is_file():
+        return DEFAULT_GGUF_PATH
     return None
 
 
@@ -260,15 +303,25 @@ async def lifespan(app: FastAPI):
         return
 
     rt.ui_only = False
-    merged = _resolve_merged_path(args.merged_model_dir)
-    print("A carregar modelo (só uma vez; pode demorar)…", flush=True)
     try:
-        rt.load(
-            args.model_name,
-            args.adapter_dir,
-            merged,
-            trust_remote_code=args.trust_remote_code,
-        )
+        if args.inference_backend == "gguf":
+            gguf = _resolve_gguf_path(args.gguf_path)
+            if not gguf:
+                raise FileNotFoundError(
+                    "Modo gguf: ficheiro .gguf não encontrado. Use --gguf-path, "
+                    f"ou ORACULO_GGUF_PATH, ou coloque o ficheiro em {DEFAULT_GGUF_PATH}."
+                )
+            print(f"A carregar modelo GGUF (só uma vez; pode demorar)…\n  {gguf}", flush=True)
+            rt.load_gguf(gguf)
+        else:
+            merged = _resolve_merged_path(args.merged_model_dir)
+            print("A carregar modelo (só uma vez; pode demorar)…", flush=True)
+            rt.load(
+                args.model_name,
+                args.adapter_dir,
+                merged,
+                trust_remote_code=args.trust_remote_code,
+            )
     except Exception as err:
         print(f"Erro ao carregar: {err}", file=sys.stderr, flush=True)
         raise
@@ -722,7 +775,6 @@ def _job_worker(
     if not st:
         return
     cancel_event: threading.Event = st["cancel_event"]
-    tokenizer = rt.tokenizer
     try:
         t0: float
         t1: float
@@ -747,9 +799,7 @@ def _job_worker(
             asst_full = j.get("text") or ""
             gen_sec = max(float(t1 - t0), 1e-9)
             if asst_full.strip():
-                toks = len(
-                    tokenizer.encode(str(asst_full), add_special_tokens=False)  # type: ignore[union-attr]
-                )
+                toks = rt.count_output_tokens(str(asst_full))
             else:
                 toks = 0
             j["output_tokens"] = toks

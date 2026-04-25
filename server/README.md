@@ -70,6 +70,12 @@ Se não houver modelo fundido, carrega o **modelo base** (`DEFAULT_MODEL_NAME`) 
 
 Podes forçar caminhos na linha de comando (ver abaixo).
 
+## Inferência HF (PyTorch) vs GGUF (`.gguf` quantizado)
+
+Podes levantar o **mesmo** servidor com o motor **HuggingFace** (padrão) ou com ficheiro **GGUF** via `llama-cpp-python` — útil em CPU / menos RAM. **Guia completo (env, dependências, exemplos):** [README_INFERENCE_HF_GGUF.md](README_INFERENCE_HF_GGUF.md).
+
+- **Resumo:** `ORACULO_INFERENCE_BACKEND=gguf` + `ORACULO_GGUF_PATH` (ou ficheiro em `tools/quantized_model/…` se existir) e `pip install -r server/requirements-gguf.txt`.
+
 ## Opções da linha de comando
 
 ```text
@@ -77,6 +83,7 @@ python3 server/serve_lora.py [--host 0.0.0.0] [--port 8765] \
   [--model_name ID_NO_HUB] \
   [--adapter_dir /caminho/para/lora_adapter] \
   [--merged_model_dir /caminho/para/merged_model] \
+  [--inference-backend hf|gguf] [--gguf-path /caminho/modelo.gguf] \
   [--trust_remote_code]
 ```
 
@@ -93,7 +100,7 @@ Exemplos:
 Com o servidor em execução:
 
 - **Estado** — `GET http://127.0.0.1:8765/api/status`  
-  Resposta JSON: `loaded`, `mode` (`fundido` ou `base+LoRA`), `model_name`.
+  Resposta JSON: `loaded`, `mode` (ex. `fundido`, `base+LoRA` ou `gguf`), `backend` (`hf` ou `gguf`), `model_name`.
 
 - **Chat** — `POST http://127.0.0.1:8765/api/chat`  
   Corpo JSON (exemplo):

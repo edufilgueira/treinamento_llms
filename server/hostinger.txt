@@ -16,6 +16,9 @@ ps aux | grep python
 tail -f ~/treinamento_llms/server/app.log
 
 
+find ~ -type d -name ".venv"
+
+
 ORACULO_PG_HOST=127.0.0.1
 ORACULO_PG_PORT=5432
 ORACULO_PG_USER=postgres
@@ -23,8 +26,5 @@ ORACULO_PG_PASSWORD=Pas101010&du1
 ORACULO_PG_DATABASE=oraculo
 ORACULO_PG_SSLMODE=prefer
 
-
-modelo quantizado (compactado)
-lhama cpp 
-
-
+sudo apt update
+sudo apt install git -y

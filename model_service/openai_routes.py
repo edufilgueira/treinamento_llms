@@ -92,12 +92,6 @@ def _prompt_token_count(tokenizer: Any, messages: list[dict[str, str]]) -> int:
     return 0
 
 
-def _completion_tokens(tokenizer: Any, text: str) -> int:
-    if not (text or "").strip():
-        return 0
-    return len(tokenizer.encode(text, add_special_tokens=False))
-
-
 def _echo_model_id(req_model: str, loaded_id: str) -> str:
     if req_model and req_model != "default":
         return req_model
@@ -140,13 +134,14 @@ async def chat_completions(
         )
     messages = _messages_to_dicts(body)
     tok = rt.tokenizer
-    model = rt.model
-    assert tok is not None and model is not None
     max_new = int(body.max_tokens or 2048)
     temp = float(body.temperature if body.temperature is not None else 0.7)
     top_p = float(body.top_p if body.top_p is not None else 0.9)
     resp_model = _echo_model_id(body.model, rt.model_id)
-    prompt_toks = _prompt_token_count(tok, messages)
+    if tok is not None and rt.backend == "hf":
+        prompt_toks = _prompt_token_count(tok, messages)
+    else:
+        prompt_toks = 0
 
     if body.stream:
 
@@ -230,7 +225,12 @@ async def chat_completions(
     except Exception as err:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(err)) from err
 
-    comp_toks = _completion_tokens(tok, content)
+    u = rt.pop_openai_usage()
+    if u:
+        prompt_toks = int(u.get("prompt_tokens", prompt_toks) or 0)
+        comp_toks = int(u.get("completion_tokens", 0) or 0) or rt.count_output_tokens(content)
+    else:
+        comp_toks = rt.count_output_tokens(content)
     cid = f"chatcmpl-{secrets.token_hex(12)}"
     created = int(time.time())
     payload = {

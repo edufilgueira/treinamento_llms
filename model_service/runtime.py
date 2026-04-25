@@ -1,5 +1,5 @@
 """
-Runtime único do modelo: carrega tokenizer + rede e serializa geração (um pedido de cada vez).
+Runtime único do modelo: carrega tokenizer + rede (HF) **ou** Llama .gguf e serializa geração.
 Usado pelo servidor web e pela API /v1/chat/completions.
 """
 
@@ -23,15 +23,27 @@ class ModelRuntime:
     def __init__(self) -> None:
         self._tokenizer: Any = None
         self._model: Any = None
+        self._llm: Any = None
+        self._backend: str = "hf"
         self._mode: str = ""
         self._model_id: str = ""
         self.ui_only: bool = False
         self._gen_lock = threading.Lock()
         self._active_lock = threading.Lock()
         self._active_uid: int | None = None
+        self._last_openai_usage: dict[str, int] | None = None
+        self._last_openai_lock = threading.Lock()
+
+    @property
+    def backend(self) -> str:
+        return self._backend
 
     @property
     def is_loaded(self) -> bool:
+        if self.ui_only:
+            return False
+        if self._backend == "gguf":
+            return self._llm is not None
         return self._model is not None
 
     @property
@@ -50,6 +62,21 @@ class ModelRuntime:
     def model_id(self) -> str:
         return self._model_id
 
+    def pop_openai_usage(self) -> dict[str, int] | None:
+        with self._last_openai_lock:
+            u = self._last_openai_usage
+            self._last_openai_usage = None
+            return u
+
+    def count_output_tokens(self, text: str) -> int:
+        if self._backend == "gguf" and self._llm is not None:
+            from .gguf_engine import count_output_tokens_gguf
+
+            return count_output_tokens_gguf(self._llm, text)
+        if self._tokenizer is None:
+            return max(0, len((text or "")) // 4)
+        return len(self._tokenizer.encode(str(text or ""), add_special_tokens=False))
+
     def status_public(self) -> dict[str, Any]:
         if self.ui_only:
             return {"loaded": False, "ui_only": True}
@@ -59,6 +86,7 @@ class ModelRuntime:
             "loaded": True,
             "ui_only": False,
             "mode": self._mode,
+            "backend": self._backend,
             "model_name": self._model_id,
         }
 
@@ -66,6 +94,8 @@ class ModelRuntime:
         self.ui_only = True
         self._tokenizer = None
         self._model = None
+        self._llm = None
+        self._backend = "hf"
         self._mode = ""
         self._model_id = ""
 
@@ -80,6 +110,8 @@ class ModelRuntime:
         from lora_engine import load_lora_pipeline
 
         self.ui_only = False
+        self._llm = None
+        self._backend = "hf"
         tokenizer, model, merged_used = load_lora_pipeline(
             model_name,
             adapter_dir,
@@ -92,11 +124,26 @@ class ModelRuntime:
         self._mode = "fundido" if merged_used is not None else "base+LoRA"
         self._model_id = str(merged_used.resolve()) if merged_used is not None else model_name
 
+    def load_gguf(self, gguf_path: Path) -> None:
+        from .gguf_engine import load_llama
+
+        self.ui_only = False
+        self._tokenizer = None
+        self._model = None
+        self._llm = load_llama(gguf_path)
+        self._backend = "gguf"
+        self._mode = "gguf"
+        self._model_id = str(gguf_path.resolve())
+
     def clear(self) -> None:
         self._tokenizer = None
         self._model = None
+        self._llm = None
+        self._backend = "hf"
         self._mode = ""
         self._model_id = ""
+        with self._last_openai_lock:
+            self._last_openai_usage = None
 
     @property
     def active_generation_user_id(self) -> int | None:
@@ -123,11 +170,30 @@ class ModelRuntime:
         top_p: float,
         user_id: int | None = None,
     ) -> str:
-        from lora_engine import generate_chat_reply
-
-        if not self.is_loaded or self._tokenizer is None or self._model is None:
+        if not self.is_loaded:
             raise RuntimeError("Modelo não carregado.")
         with self._generation_slot(user_id):
+            if self._backend == "gguf":
+                if self._llm is None:
+                    raise RuntimeError("GGUF não carregado.")
+                from .gguf_engine import generate_chat_reply_gguf
+
+                text, usage = generate_chat_reply_gguf(
+                    self._llm,
+                    messages,
+                    max_new_tokens=max_new_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                )
+                if usage:
+                    with self._last_openai_lock:
+                        self._last_openai_usage = usage
+                return text
+
+            from lora_engine import generate_chat_reply
+
+            if self._tokenizer is None or self._model is None:
+                raise RuntimeError("Modelo não carregado.")
             return generate_chat_reply(
                 self._tokenizer,
                 self._model,
@@ -147,11 +213,30 @@ class ModelRuntime:
         cancel_event: threading.Event,
         user_id: int | None = None,
     ) -> Iterator[str]:
-        from lora_engine import generate_chat_reply_stream
-
-        if not self.is_loaded or self._tokenizer is None or self._model is None:
+        if not self.is_loaded:
             raise RuntimeError("Modelo não carregado.")
         with self._generation_slot(user_id):
+            if self._backend == "gguf":
+                if self._llm is None:
+                    raise RuntimeError("GGUF não carregado.")
+                with self._last_openai_lock:
+                    self._last_openai_usage = None
+                from .gguf_engine import generate_chat_reply_stream_gguf
+
+                yield from generate_chat_reply_stream_gguf(
+                    self._llm,
+                    messages,
+                    max_new_tokens=max_new_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    cancel_event=cancel_event,
+                )
+                return
+
+            from lora_engine import generate_chat_reply_stream
+
+            if self._tokenizer is None or self._model is None:
+                raise RuntimeError("Modelo não carregado.")
             yield from generate_chat_reply_stream(
                 self._tokenizer,
                 self._model,

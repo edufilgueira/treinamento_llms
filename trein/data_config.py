@@ -3,7 +3,7 @@ Configuração compartilhada: dados (snapshots) e defaults do modelo / pastas de
 
 **Modelo e pastas** — `DEFAULT_MODEL_NAME`, `DEFAULT_ADAPTER_DIR` e `DEFAULT_MERGED_MODEL_DIR`
 são usados por `train_lora.py`, `inferir.py`, `merge_lora.py` e `server/serve_lora.py`. Altere **uma vez** aqui para
-manter treino, inferência e merge alinhados.
+manter treino, inferência e merge alinhados. Opcional: `DEFAULT_GGUF_PATH` (ficheiro .gguf, modo `ORACULO_INFERENCE_BACKEND=gguf`).
 
 **Progresso em `inferir.py`** — duas coisas **distintas**:
 - `SHOW_LOADING_PROGRESS` — **só** barras do tqdm (pesos) e do download no Hugging Face Hub (`True` = mostrar, `False` = ocultar).
@@ -70,6 +70,8 @@ DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-3B-Instruct"
 # --- Pastas de saída do LoRA / merge: sempre trein/outputs/... na raiz do repositório ---
 DEFAULT_ADAPTER_DIR = REPO_ROOT / "trein" / "outputs" / "lora_adapter"
 DEFAULT_MERGED_MODEL_DIR = REPO_ROOT / "trein" / "outputs" / "merged_model"
+# Ficheiro GGUF sugerido (llama.cpp / `llama-cpp-python`); ajuste ou use ORACULO_GGUF_PATH.
+DEFAULT_GGUF_PATH = REPO_ROOT / "tools" / "quantized_model" / "Merged_Model-3.1B-Q4_K_M.gguf"
 
 # Versão do snapshot: "v1", "v2", ... (aparece no nome do ficheiro)
 DATASET_VERSION = "v1"
