@@ -1,4 +1,38 @@
-Perfeito — agora sim você fechou o ciclo completo. Vou organizar **EXATAMENTE o que você fez**, limpo e padronizado, como um tutorial reutilizável pra você ou qualquer pessoa do projeto.
+
+# download
+hf download bartowski/Qwen_Qwen3.6-35B-A3B-GGUF --local-dir ~/models/qwen35b-gguf --max-workers 1
+
+# listar processos
+ps -aux | grep hf
+
+# Deletar cache de download
+rm -rf ~/models/qwen35b-gguf/.cache/huggingface/download/*.lock
+rm -rf ~/.cache/huggingface/hub/.locks/*
+
+
+# Fluxo: copiar GGUF para treinamento_llm/tools
+```bash
+ls ~/.cache/huggingface/hub/
+
+ls ~/.cache/huggingface/hub/models--Qwen--Qwen3-8B/snapshotsb968826d9c46dd6066d109eabc6255188de91218
+
+### Ajusta o caminho ao script e ao modelo, conforme a tua versão de llama.cpp:
+python ~/treinamento_llms/tools/llama.cpp/convert_hf_to_gguf.py \
+  ~/.cache/huggingface/hub/models--Qwen--Qwen3-8B/snapshots/b968826d9c46dd6066d109eabc6255188de91218/ \
+  --outfile ~/treinamento_llms/tools/quantized_model/Qwen3-8B-F16.gguf \
+  --outtype f16
+
+cd ~/treinamento_llms/tools/llama.cpp/
+
+./build/bin/llama-quantize \
+  ~/treinamento_llms/tools/quantized_model/Qwen3-8B-F16.gguf \
+  ~/treinamento_llms/tools/quantized_model/Qwen3-8B-F16-Q4_K_M.gguf \
+  Q4_K_M
+
+```
+
+
+
 
 ---
 
@@ -100,8 +134,8 @@ python convert_hf_to_gguf.py ../../trein/outputs/merged_model
 
 ```bash
 python3 convert_hf_to_gguf.py \
-  ~/.cache/huggingface/hub/models--mistralai--Mistral-7B-v0.3/snapshots/caa1feb0e54d415e2df31207e5f4e273e33509b1 \
-  --outfile ~/treinamento_llms/trein/outputs/merged_mistral-7b-f16.gguf \
+  ~/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B/snapshots/995ad96eacd98c81ed38be0c5b274b04031597b0/ \
+  --outfile ~/treinamento_llms/trein/outputs/merged_Qwen3.6-35B-A3B-f16.gguf \
   --outtype f16
 ```
 
@@ -178,8 +212,8 @@ Rodar:
 Q4_K_M
 
 ./build/bin/llama-quantize \
-../quantized_model/mistral-7b-f16.gguf.gguf \
-../quantized_model/mistral-7b-f16.gguf-Q4_K_M.gguf \
+../quantized_model/Merged_Model-3.1B-BF16.gguf \
+../quantized_model/Merged_Model-3.1B-Q4_K_M.gguf \
 Q4_K_M
 ```
 

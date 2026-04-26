@@ -465,6 +465,9 @@ Você pode redirecionar onde o Hugging Face guarda dados com variáveis de ambie
 
 Se não configurar nada, o padrão no Linux costuma ser `~/.cache/huggingface/`.
 
+download hg
+HF_HUB_ENABLE_HF_TRANSFER=1 hf download Qwen/Qwen3.6-35B-A3B --max-workers 1
+
 ### H.3 Ver qual caminho o sistema está usando
 
 Com a CLI do Hub instalada (vem com `huggingface_hub`, normalmente junto do ecossistema Transformers), use a CLI unificada **`hf`**:
