@@ -11,6 +11,7 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 from threading import Event, Thread
+from typing import Any
 
 import torch
 from peft import PeftModel
@@ -39,6 +40,31 @@ def _env_flag(name: str, default: bool) -> bool:
     if not v:
         return default
     return v in ("1", "true", "yes", "on")
+
+
+def _apply_chat_template(
+    tokenizer: AutoTokenizer,
+    conversation: list,
+    *,
+    tokenize: bool,
+    add_generation_prompt: bool,
+    return_tensors: str | None = None,
+) -> Any:
+    """``enable_thinking=False`` (Qwen3); ignora se o tokenizer não suportar o argumento."""
+    kwargs: dict[str, Any] = {
+        "tokenize": tokenize,
+        "add_generation_prompt": add_generation_prompt,
+    }
+    if return_tensors is not None:
+        kwargs["return_tensors"] = return_tensors
+    try:
+        return tokenizer.apply_chat_template(
+            conversation,
+            **kwargs,
+            enable_thinking=False,
+        )
+    except TypeError:
+        return tokenizer.apply_chat_template(conversation, **kwargs)
 
 
 def _attn_implementation() -> str | None:
@@ -274,7 +300,8 @@ def generate_chat_reply(
     do_sample: bool = True,
 ) -> str:
     """``messages``: lista de ``{\"role\": \"user\"|\"assistant\", \"content\": str}``."""
-    model_inputs = tokenizer.apply_chat_template(
+    model_inputs = _apply_chat_template(
+        tokenizer,
         messages,
         tokenize=True,
         add_generation_prompt=True,
@@ -319,7 +346,8 @@ def generate_chat_reply_stream(
     (para SSE no servidor). O Hugging Face pode devolver texto acumulado ou por token; normalizamos
     para **deltas** (só o que é novo em cada passo).
     """
-    model_inputs = tokenizer.apply_chat_template(
+    model_inputs = _apply_chat_template(
+        tokenizer,
         messages,
         tokenize=True,
         add_generation_prompt=True,

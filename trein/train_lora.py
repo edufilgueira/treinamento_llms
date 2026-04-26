@@ -142,11 +142,15 @@ def parse_args() -> argparse.Namespace:
 
 
 def messages_to_text(tokenizer: AutoTokenizer, example: dict) -> dict:
-    text = tokenizer.apply_chat_template(
-        example["messages"],
-        tokenize=False,
-        add_generation_prompt=False,
-    )
+    kw = {"tokenize": False, "add_generation_prompt": False}
+    try:
+        text = tokenizer.apply_chat_template(
+            example["messages"],
+            **kw,
+            enable_thinking=False,
+        )
+    except TypeError:
+        text = tokenizer.apply_chat_template(example["messages"], **kw)
     return {"text": text}
 
 

@@ -18,6 +18,8 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from lora_engine import _apply_chat_template
+
 from .runtime import get_runtime
 
 router = APIRouter(prefix="/v1", tags=["openai"])
@@ -75,7 +77,8 @@ def _messages_to_dicts(body: OAIChatCompletionRequest) -> list[dict[str, str]]:
 
 
 def _prompt_token_count(tokenizer: Any, messages: list[dict[str, str]]) -> int:
-    ids = tokenizer.apply_chat_template(
+    ids = _apply_chat_template(
+        tokenizer,
         messages,
         tokenize=True,
         add_generation_prompt=True,
