@@ -109,6 +109,77 @@ def _create_chat_completion(llm: Any, **kwargs: Any) -> Any:
         return llm.create_chat_completion(**kwargs)
 
 
+def _gguf_jinja_chat_prompt(
+    llm: Any,
+    messages: list[dict[str, str]],
+    *,
+    enable_thinking: bool,
+) -> Any | None:
+    """
+    Aplica o chat template Jinja embutido no GGUF com ``enable_thinking`` explícito.
+
+    O ``create_chat_completion`` do llama-cpp-python **não** encaminha
+    ``chat_template_kwargs`` ao formatter (só lista fixa de argumentos), por isso
+    o caminho fiável para Qwen3 é renderizar aqui e usar ``create_completion``.
+    """
+    if _env_flag("ORACULO_GGUF_DISABLE_JINJA_NO_THINK", False):
+        return None
+    try:
+        from llama_cpp.llama_chat_format import Jinja2ChatFormatter
+    except ImportError:
+        return None
+    md = getattr(llm, "metadata", None) or {}
+    template = md.get("tokenizer.chat_template")
+    if not template:
+        return None
+    eos_id = int(llm.token_eos())
+    bos_id = int(llm.token_bos())
+    try:
+        eos_txt = llm.detokenize([eos_id], special=True).decode("utf-8", errors="replace")
+        bos_txt = llm.detokenize([bos_id], special=True).decode("utf-8", errors="replace")
+    except Exception:
+        eos_txt, bos_txt = "", ""
+    stop_ids = [eos_id] if eos_id >= 0 else []
+    fmt = Jinja2ChatFormatter(
+        template=template,
+        eos_token=eos_txt,
+        bos_token=bos_txt,
+        add_generation_prompt=True,
+        stop_token_ids=stop_ids if stop_ids else None,
+    )
+    extra: dict[str, Any] = {"enable_thinking": enable_thinking}
+    rb_raw = (os.environ.get("ORACULO_GGUF_REASONING_BUDGET") or "").strip()
+    if rb_raw:
+        try:
+            extra["reasoning_budget"] = int(rb_raw, 10)
+        except ValueError:
+            pass
+    elif not enable_thinking:
+        extra["reasoning_budget"] = 0
+    try:
+        return fmt(messages=messages, **extra)
+    except Exception:
+        try:
+            return fmt(messages=messages, enable_thinking=enable_thinking)
+        except Exception:
+            return None
+
+
+def _stops_for_completion(formatted: Any) -> list[str]:
+    raw = getattr(formatted, "stop", None)
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        return [raw] if raw else []
+    if isinstance(raw, list):
+        return [s for s in raw if s]
+    return []
+
+
+def _use_jinja_no_think_path() -> bool:
+    return not _env_flag("ORACULO_GGUF_ENABLE_THINKING", False)
+
+
 def load_llama(
     gguf_path: Path,
     *,
@@ -158,16 +229,44 @@ def generate_chat_reply_gguf(
     temperature: float = 0.7,
     top_p: float = 0.9,
 ) -> tuple[str, dict[str, int] | None]:
+    msgs = _messages_for_llama(messages)
+    formatted = None
+    if _use_jinja_no_think_path():
+        formatted = _gguf_jinja_chat_prompt(llm, msgs, enable_thinking=False)
+
+    if formatted is not None:
+        response = llm.create_completion(
+            prompt=formatted.prompt,
+            max_tokens=max_new_tokens,
+            temperature=float(max(0.0, temperature)),
+            top_p=float(max(0.0, min(1.0, top_p))),
+            stream=False,
+            stop=_stops_for_completion(formatted),
+        )
+        usage = response.get("usage")
+        u_out: dict[str, int] | None = None
+        if isinstance(usage, dict):
+            u_out = {
+                "prompt_tokens": int(usage.get("prompt_tokens", 0) or 0),
+                "completion_tokens": int(usage.get("completion_tokens", 0) or 0),
+                "total_tokens": int(usage.get("total_tokens", 0) or 0),
+            }
+        choice = (response.get("choices") or [{}])[0]
+        text = (choice.get("text") or "").strip()
+        if not _env_flag("ORACULO_GGUF_ENABLE_THINKING", False):
+            text = _strip_thinking_blocks(text)
+        return text, u_out
+
     response = _create_chat_completion(
         llm,
-        messages=_messages_for_llama(messages),
+        messages=msgs,
         max_tokens=max_new_tokens,
         temperature=float(max(0.0, temperature)),
         top_p=float(max(0.0, min(1.0, top_p))),
         stream=False,
     )
     usage = response.get("usage")
-    u_out: dict[str, int] | None = None
+    u_out = None
     if isinstance(usage, dict):
         u_out = {
             "prompt_tokens": int(usage.get("prompt_tokens", 0) or 0),
@@ -191,9 +290,46 @@ def generate_chat_reply_stream_gguf(
     top_p: float = 0.9,
     cancel_event: threading.Event | None = None,
 ) -> Iterator[str]:
+    msgs = _messages_for_llama(messages)
+    formatted = None
+    if _use_jinja_no_think_path():
+        formatted = _gguf_jinja_chat_prompt(llm, msgs, enable_thinking=False)
+
+    if formatted is not None:
+        stream = llm.create_completion(
+            prompt=formatted.prompt,
+            max_tokens=max_new_tokens,
+            temperature=float(max(0.0, temperature)),
+            top_p=float(max(0.0, min(1.0, top_p))),
+            stream=True,
+            stop=_stops_for_completion(formatted),
+        )
+
+        def _completion_stream_texts() -> Iterator[str]:
+            for chunk in stream:
+                if cancel_event is not None and cancel_event.is_set():
+                    break
+                try:
+                    choices = chunk.get("choices") or []
+                    if not choices:
+                        continue
+                    piece = choices[0].get("text") if isinstance(choices[0], dict) else None
+                except (KeyError, IndexError, TypeError):
+                    continue
+                if piece:
+                    yield piece
+
+        if _env_flag("ORACULO_GGUF_ENABLE_THINKING", False):
+            yield from _completion_stream_texts()
+        elif _env_flag("ORACULO_GGUF_STREAM_STRIP_THINKING", False):
+            yield from _stream_skip_leading_thinking(_completion_stream_texts())
+        else:
+            yield from _completion_stream_texts()
+        return
+
     stream = _create_chat_completion(
         llm,
-        messages=_messages_for_llama(messages),
+        messages=msgs,
         max_tokens=max_new_tokens,
         temperature=float(max(0.0, temperature)),
         top_p=float(max(0.0, min(1.0, top_p))),
