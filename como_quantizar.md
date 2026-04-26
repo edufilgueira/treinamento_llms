@@ -1,3 +1,5 @@
+https://github.com/ggerganov/llama.cpp
+
 
 # download
 hf download bartowski/Qwen_Qwen3.6-35B-A3B-GGUF --local-dir ~/models/qwen35b-gguf --max-workers 1

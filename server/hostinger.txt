@@ -1,34 +1,27 @@
+# Notas de deploy (substitui HOST pelo teu servidor; credenciais só em server/.env — não commits).
 
+ssh root@HOST
 
+scp lora_adapter.zip root@HOST:/root/treinamento_llms/trein/outputs
 
-ssh root@187.77.44.167
-
-
-scp lora_adapter.zip  root@187.77.44.167:/root/treinamento_llms/trein/outputs
-
-scp root@187.77.44.167:/root/treinamento_llms/trein/outputs/lora_adapter.zip "C:\Users\Eduardo Filgueira\Downloads"
-
+scp root@HOST:/root/treinamento_llms/trein/outputs/lora_adapter.zip ./
 
 segundo plano
 nohup ./serve.sh > app.log 2>&1 &
 
-
 ps aux | grep python
-
 
 tail -f ~/treinamento_llms/server/app.log
 
-
 find ~ -type d -name ".venv"
 
-
-
-ORACULO_PG_HOST=127.0.0.1
-ORACULO_PG_PORT=5432
-ORACULO_PG_USER=postgres
-ORACULO_PG_PASSWORD=Pas101010&du1
-ORACULO_PG_DATABASE=oraculo
-ORACULO_PG_SSLMODE=prefer
+# Variáveis PostgreSQL: copiar para server/.env (ver server/.env.example), não colocar passwords aqui.
+# ORACULO_PG_HOST=127.0.0.1
+# ORACULO_PG_PORT=5432
+# ORACULO_PG_USER=postgres
+# ORACULO_PG_PASSWORD=
+# ORACULO_PG_DATABASE=oraculo
+# ORACULO_PG_SSLMODE=prefer
 
 sudo apt update
 sudo apt install git -y

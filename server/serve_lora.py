@@ -42,10 +42,34 @@ for _p in (_PROJECT_ROOT, _TREIN_DIR, _SERVER_DIR):
 def _load_dotenv_early() -> None:
     try:
         from dotenv import load_dotenv
-    except ImportError:
-        return
+    except ImportError as err:
+        print(
+            "Erro: falta o pacote python-dotenv. Instale com:  pip install python-dotenv",
+            file=sys.stderr,
+            flush=True,
+        )
+        raise SystemExit(1) from err
     load_dotenv(_PROJECT_ROOT / ".env")
     load_dotenv(_SERVER_DIR / ".env", override=True)
+    root_env = _PROJECT_ROOT / ".env"
+    server_env = _SERVER_DIR / ".env"
+    if not root_env.is_file() and not server_env.is_file():
+        print(
+            "Erro: é obrigatório existir um ficheiro `.env`.\n"
+            f"  Cria `{server_env}` (recomendado) ou `{root_env}` — por exemplo:\n"
+            f"    cp {_SERVER_DIR / '.env.example'} {server_env}\n"
+            "  Depois edita e define pelo menos ORACULO_PG_HOST (e as restantes chaves PostgreSQL).",
+            file=sys.stderr,
+            flush=True,
+        )
+        raise SystemExit(1)
+    if not (os.environ.get("ORACULO_PG_HOST") or "").strip():
+        print(
+            "Erro: ORACULO_PG_HOST não está definido. Adiciona-o ao `.env` (ver server/.env.example).",
+            file=sys.stderr,
+            flush=True,
+        )
+        raise SystemExit(1)
 
 
 _load_dotenv_early()
@@ -142,11 +166,13 @@ _MAX_JOBS_BUFFER = 64
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Servidor local para o modelo LoRA treinado.")
+    _bind_default = (os.environ.get("ORACULO_BIND_HOST") or "").strip() or "0.0.0.0"
     p.add_argument(
         "--host",
-        default="0.0.0.0",
-        help="Endereço a escutar. 0.0.0.0 = todas as interfaces (outras máquinas na rede). "
-        "127.0.0.1 = só este computador.",
+        default=_bind_default,
+        help="Endereço a escutar (sobrepõe ORACULO_BIND_HOST do .env se passares o argumento). "
+        "ORACULO_BIND_HOST ou omissão usam 0.0.0.0 (todas as interfaces IPv4). "
+        "Só localhost: define ORACULO_BIND_HOST=127.0.0.1 ou passa --host 127.0.0.1.",
     )
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--model_name", default=DEFAULT_MODEL_NAME)

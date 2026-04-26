@@ -121,14 +121,14 @@
 
   /**
    * Com a página em file://, fetch("/api/...") não aponta para o servidor.
-   * Usa 127.0.0.1:8765 por defeito; opcional: localStorage "oraculo_api_origin" = "http://host:porta"
+   * Em file:// usa localhost:porta por defeito; opcional: localStorage "oraculo_api_origin".
    */
   const API_ORIGIN = (function () {
     try {
       const s = localStorage.getItem("oraculo_api_origin");
       if (s) return String(s).replace(/\/$/, "");
     } catch (_) {}
-    if (window.location.protocol === "file:") return "http://127.0.0.1:8765";
+    if (window.location.protocol === "file:") return "http://localhost:8765";
     return "";
   })();
 

@@ -20,7 +20,7 @@
       const s = localStorage.getItem("oraculo_api_origin");
       if (s) return String(s).replace(/\/$/, "");
     } catch (_) {}
-    if (window.location.protocol === "file:") return "http://127.0.0.1:8765";
+    if (window.location.protocol === "file:") return "http://localhost:8765";
     return "";
   })();
 

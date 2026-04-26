@@ -1,9 +1,10 @@
 """
 Ligação PostgreSQL e criação de tabelas (utilizadores, sessões, mensagens).
-Configuração por variáveis de ambiente (podes definir no `.env` na raiz do
-projecto ou em `server/.env`; o segundo substitui o primeiro) ou `export` no shell:
+Configuração por variáveis de ambiente (`.env` na raiz do projecto ou `server/.env`;
+o segundo substitui o primeiro) ou `export` no shell. **ORACULO_PG_HOST é obrigatório**
+(o servidor não arranca sem ele — ver `serve_lora.py`).
 
-  ORACULO_PG_HOST   (padrão: 187.77.44.167 — confere 187 vs 87, é erro comum)
+  ORACULO_PG_HOST   (obrigatório, ex.: 127.0.0.1 ou o host do teu PostgreSQL)
   ORACULO_PG_PORT   (padrão: 5432)
   ORACULO_PG_USER
   ORACULO_PG_PASSWORD
@@ -51,8 +52,13 @@ def get_pg_dsn_dict() -> dict[str, Any]:
     global _pg_params
     if _pg_params is not None:
         return dict(_pg_params)
+    host = (os.environ.get("ORACULO_PG_HOST") or "").strip()
+    if not host:
+        raise RuntimeError(
+            "ORACULO_PG_HOST não definido. Define-o no `.env` (copia server/.env.example → server/.env)."
+        )
     _pg_params = {
-        "host": os.environ.get("ORACULO_PG_HOST", "187.77.44.167").strip() or "187.77.44.167",
+        "host": host,
         "port": int(os.environ.get("ORACULO_PG_PORT", "5432").strip() or "5432"),
         "user": (os.environ.get("ORACULO_PG_USER") or os.environ.get("PGUSER") or "").strip() or "postgres",
         "password": (os.environ.get("ORACULO_PG_PASSWORD") or os.environ.get("PGPASSWORD") or "").strip(),

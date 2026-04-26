@@ -4,7 +4,7 @@ Este diretório contém o **servidor HTTP** que carrega o modelo **uma única ve
 
 ## Variáveis de ambiente (PostgreSQL, etc.)
 
-Copia `server/.env.example` para **`server/.env`** e preenche `ORACULO_PG_*` (e o que precisares). O servidor carrega primeiro `.env` na **raiz** do repositório (se existir) e depois **`server/.env`**, que **substitui** chaves repetidas. Para credenciais só do Oráculo, basta `server/.env`.
+Copia `server/.env.example` para **`server/.env`** (ou cria `.env` na **raiz** do repo) e preenche pelo menos **`ORACULO_PG_HOST`** e o resto de `ORACULO_PG_*`. O `serve_lora.py` **não arranca** se não existir nenhum desses ficheiros. Carrega primeiro `.env` na raiz e depois **`server/.env`**, que **substitui** chaves repetidas.
 
 ## O que precisas antes
 
