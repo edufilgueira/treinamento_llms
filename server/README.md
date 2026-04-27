@@ -77,6 +77,27 @@ Podes levantar o **mesmo** servidor com o motor **HuggingFace** (padrão) ou com
 
 - **Resumo:** `ORACULO_INFERENCE_BACKEND=gguf` + `ORACULO_GGUF_PATH` (ou ficheiro em `tools/quantized_model/…` se existir) e `pip install -r server/requirements-gguf.txt`.
 
+## Definições de administrador: llama-server (HTTP)
+
+Quando o backend é **llama-server**, o processo Python **não** carrega pesos HF nem GGUF: só faz de *proxy* para o binário `llama-server` (llama.cpp) que já tens a correr com `-m …`. Estas opções aparecem na UI (Definições) para **administradores** e gravam-se na base (tabela `app_global`). **Importante:** o URL efectivo no arranque do `serve_lora` (usar base de dados vs `.env`) só é aplicado depois de **reiniciares** o servidor Oráculo.
+
+| Campo                           | Explicação prática                                                                                                                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Usar llama-server**           | Define quem é o “cérebro”. **Ligado:** o Oráculo só faz requisições HTTP e quem processa tudo é o `llama-server`. **Desligado:** o Python tenta lidar diretamente (via `.env`). |
+| **API — host / IP**             | Endereço onde o `llama-server` está rodando. Ex.: `127.0.0.1` (mesma máquina) ou IP remoto. É para onde o Oráculo envia as requisições.                                         |
+| **Porta**                       | Porta HTTP do `llama-server` (ex.: `8080`). Forma a URL completa `http://host:porta`.                                                                                           |
+| **Contexto n_ctx (referência)** (ex.: 512 – 32768+) | **Não afeta execução.** É só informativo. O valor real vem do `-c` no arranque do `llama-server`. Serve como lembrete do limite de contexto.                                    |
+| **Máx. tokens novos**  (ex.: 1 – 4096+)    | Limite de tokens da **resposta gerada** (`max_tokens`). Não inclui o prompt, só o que o modelo vai escrever.                                                                    |
+| **Temperature**   (0.0 – 2.0)              | Controla aleatoriedade. Baixo = respostas mais diretas e previsíveis. Alto = mais criativas e variáveis.                                                                        |
+| **Top P**  (0.0 – 1.0)                     | Filtro de probabilidade (*nucleus sampling*). Limita as escolhas aos tokens mais prováveis, evitando respostas muito aleatórias.                                                |
+| **Repeat penalty**   (1.0 – 2.0)           | Evita repetição de palavras/frases. Valores típicos: `1.1 – 1.2`. Muito alto pode prejudicar coerência.                                                                         |
+| **Repeat last N**  (0 – 4096+)             | Quantidade de tokens recentes considerados para aplicar a penalização de repetição. Ex.: `512` = olha os últimos 512 tokens.                                                    |
+| **Reasoning**   (off / on / auto)          | Controla o modo “pensador” (em modelos que suportam). `off` = direto, `on` = raciocina antes, `auto` = comportamento padrão do modelo.                                      |
+| **Reasoning budget**  (-1 – 4096+)         | Limite de “pensamento interno”. `0` ou `-1` geralmente desativa. Valores maiores permitem mais raciocínio, mas aumentam latência.                                               |
+
+
+O **modelo** em si continua a ser o ficheiro `.gguf` que passas ao `llama-server` com `-m`. O Oráculo resolve o campo `model` da API com `ORACULO_LLAMA_CPP_MODEL` (opcional no `.env`) ou, se vazio, com o **primeiro** `id` devolvido por `GET /v1/models` no **arranque** do `serve_lora`.
+
 ## Opções da linha de comando
 
 ```text
