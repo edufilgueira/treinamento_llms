@@ -90,8 +90,10 @@ Baseado no seu fluxo real usando llama.cpp
 
 ```bash
 treinamento_llms/
-├── model_service/
 ├── server/
+│   ├── inference/      # runtime HF / GGUF / llama-server
+│   ├── api/v1/         # OpenAI-compat
+│   └── db/
 ├── trein/
 │   └── outputs/
 │       └── merged_model/
@@ -344,12 +346,11 @@ GGUF quantizado (Q4_K_M)
 Agora você já pode:
 
 * rodar com `llama-server`
-* ou integrar no `model_service`
+* ou usar o Oráculo (`server/serve_lora.py`) que já expõe `/v1/chat/completions`
 
 ---
 
-Se quiser, posso montar o próximo passo:
-👉 subir isso como API estilo OpenAI dentro do seu `model_service` (já plugando no seu `openai_routes.py`).
+O servidor já inclui API estilo OpenAI em `server/api/v1/openai.py` (montada em `server/main.py`).
 
 
 

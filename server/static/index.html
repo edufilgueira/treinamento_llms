@@ -255,26 +255,13 @@
         rows="8"
         placeholder="Instrução adicional só para a tua conta. Junta-se depois do prompt global. Opcional."
       ></textarea>
-      <div class="modal__grid-3" id="settings-model-params" hidden>
-        <div>
-          <label class="modal__label" for="settings-max-tokens">Máx. tokens novos</label>
-          <input type="number" id="settings-max-tokens" class="modal__input" min="16" max="4096" step="1" />
-        </div>
-        <div>
-          <label class="modal__label" for="settings-temp">Temperature</label>
-          <input type="number" id="settings-temp" class="modal__input" min="0.01" max="2" step="0.01" />
-        </div>
-        <div>
-          <label class="modal__label" for="settings-top-p">Top P</label>
-          <input type="number" id="settings-top-p" class="modal__input" min="0.05" max="1" step="0.01" />
-        </div>
-      </div>
       <div id="settings-block-llama" class="settings-llama-block" hidden>
         <hr class="modal__hr" />
-        <h3 class="modal__subh">Llama.cpp (servidor HTTP)</h3>
+        <h3 class="modal__subh">Parâmetros de geração e llama-server</h3>
         <p class="modal__hint modal__hint--small" id="settings-llama-hint">
-          Liga o Oráculo ao <code>llama-server</code>. O contexto (<code>-c</code>) deve coincidir com o arranque do binário.
-          Após alterar IP, porta ou «Usar llama-server», reinicia o processo <code>serve_lora</code>.
+          Tokens, temperatura e amostragem aplicam-se à inferência (inclui HF/GGUF no Python para o administrador).
+          «Usar llama-server» delega a geração ao binário; o contexto (<code>-c</code>) deve coincidir com o arranque do llama-server.
+          Após alterar IP, porta ou essa opção, reinicia o processo Oráculo.
         </p>
         <label class="modal__check">
           <input type="checkbox" id="settings-llama-enabled" />

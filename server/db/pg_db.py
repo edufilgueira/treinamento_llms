@@ -2,7 +2,7 @@
 Ligação PostgreSQL e criação de tabelas (utilizadores, sessões, mensagens).
 Configuração por variáveis de ambiente (`.env` na raiz do projecto ou `server/.env`;
 o segundo substitui o primeiro) ou `export` no shell. **ORACULO_PG_HOST é obrigatório**
-(o servidor não arranca sem ele — ver `serve_lora.py`).
+(o servidor não arranca sem ele — ver `server/main.py` / `serve_lora.py`).
 
   ORACULO_PG_HOST   (obrigatório, ex.: 127.0.0.1 ou o host do teu PostgreSQL)
   ORACULO_PG_PORT   (padrão: 5432)
@@ -31,7 +31,7 @@ def _load_dotenv_if_available() -> None:
         from dotenv import load_dotenv
     except ImportError:
         return
-    _server_dir = Path(__file__).resolve().parent
+    _server_dir = Path(__file__).resolve().parent.parent
     _root = _server_dir.parent
     load_dotenv(_root / ".env")
     load_dotenv(_server_dir / ".env", override=True)

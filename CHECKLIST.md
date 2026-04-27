@@ -1,0 +1,1 @@
+- Garantir que o modelo organize varias respostas quando o usuario faz varias perguntas no mesmo prompt

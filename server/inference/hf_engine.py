@@ -1,12 +1,10 @@
 """
-Motor de inferência partilhado: base Hugging Face + adapter LoRA (ou pasta modelo fundido).
-Usado por `server/serve_lora.py` (e pode ser importado por scripts de treino que partilhem a mesma stack).
+Motor Hugging Face: **só modelo fundido** (pasta merge_lora), sem base+LoRA em runtime.
 """
 
 from __future__ import annotations
 
 import os
-import re
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -14,7 +12,6 @@ from threading import Event, Thread
 from typing import Any
 
 import torch
-from peft import PeftModel
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -25,8 +22,6 @@ from transformers import (
 
 
 class _CancelStoppingCriteria(StoppingCriteria):
-    """Interrompe ``model.generate`` quando ``cancel_event`` está definido."""
-
     def __init__(self, cancel_event: Event) -> None:
         super().__init__()
         self.cancel_event = cancel_event
@@ -42,7 +37,7 @@ def _env_flag(name: str, default: bool) -> bool:
     return v in ("1", "true", "yes", "on")
 
 
-def _apply_chat_template(
+def apply_chat_template(
     tokenizer: AutoTokenizer,
     conversation: list,
     *,
@@ -50,7 +45,6 @@ def _apply_chat_template(
     add_generation_prompt: bool,
     return_tensors: str | None = None,
 ) -> Any:
-    """``enable_thinking=False`` (Qwen3); ignora se o tokenizer não suportar o argumento."""
     kwargs: dict[str, Any] = {
         "tokenize": tokenize,
         "add_generation_prompt": add_generation_prompt,
@@ -68,7 +62,6 @@ def _apply_chat_template(
 
 
 def _attn_implementation() -> str | None:
-    """sdpa = PyTorch SDPA (rápido, sem deps extra); eager = compatível. flash_attention_2 requer o pacote."""
     raw = (os.environ.get("ORACULO_ATTN_IMPLEMENTATION") or "").strip()
     if raw:
         return raw
@@ -80,7 +73,6 @@ def _attn_implementation() -> str | None:
 def _apply_cuda_runtime_prefs() -> None:
     if not torch.cuda.is_available():
         return
-    # TF32 em matmuls float32 (alguns módulos internos) — ligeiro ganho em A4500/Ampera+
     prec = (os.environ.get("ORACULO_MATMUL_PRECISION") or "high").strip().lower()
     if prec in ("high", "highest", "medium"):
         try:
@@ -115,7 +107,6 @@ def _maybe_compile_model(model: torch.nn.Module) -> torch.nn.Module:
 def _forward_warmup(
     tokenizer: AutoTokenizer, model: torch.nn.Module, skip_if_no_cuda: bool = False
 ) -> None:
-    """Um forward curto para aquecer CUDA/cuDNN (e o grafo de compile, se houver)."""
     if skip_if_no_cuda and not torch.cuda.is_available():
         return
     if not _env_flag("ORACULO_TORCH_WARMUP", True):
@@ -131,10 +122,6 @@ def _forward_warmup(
 
 
 def hf_local_dir_has_model_weights(path: Path) -> bool:
-    """
-    True se a pasta tiver pesos carregáveis pelo Transformers (merge completo ou Hub local).
-    Evita tratar como fundido uma pasta só com config.json (merge interrompido).
-    """
     if not path.is_dir():
         return False
     if (path / "model.safetensors").is_file() or (path / "pytorch_model.bin").is_file():
@@ -152,51 +139,23 @@ def hf_local_dir_has_model_weights(path: Path) -> bool:
     return False
 
 
-def _reject_gguf_only_hub_id(model_name: str) -> None:
-    """
-    Repositórios no Hub com sufixo *-GGUF* (ex. TheBloke/...) publicam ficheiros `.gguf` para
-    llama.cpp, não um modelo carregável por `transformers` + PyTorch.
-    """
-    s = (model_name or "").strip()
-    if not s:
-        return
-    p = Path(s)
-    if p.is_dir() or p.is_file():
-        return
-    if not re.search(r"[-_]GGUF\b", s, re.I):
-        return
-    raise ValueError(
-        f"O ID {s!r} parece ser um repositório **só GGUF** (ficheiros .gguf para llama.cpp), "
-        "não um modelo Hugging Face completo (config + safetensors).\n"
-        "• Modo **PyTorch** (actual): use o ID **sem** sufixo GGUF, ex. "
-        "`mistralai/Mistral-7B-Instruct-v0.3`.\n"
-        "• Para **.gguf**: defina `ORACULO_INFERENCE_BACKEND=gguf` e `ORACULO_GGUF_PATH` "
-        "com o caminho local de um ficheiro `.gguf` (pode descarregar desse repositório TheBloke). "
-        "Ver `server/README_INFERENCE_HF_GGUF.md`."
-    )
-
-
-def load_lora_pipeline(
-    model_name: str,
-    adapter_dir: Path | None,
-    merged_model_dir: Path | None,
+def load_merged_pipeline(
+    merged_model_dir: Path,
     *,
-    base_only: bool = False,
     trust_remote_code: bool = False,
     fix_generation_max_length: bool = True,
-) -> tuple[AutoTokenizer, torch.nn.Module, Path | None]:
-    """
-    Carrega tokenizer + modelo.
-    - Se ``base_only`` é True: carrega **só** o modelo base a partir de ``model_name`` (Hugging Face ou pasta local);
-      ignora merge e LoRA (útil para testar Qwen, etc. antes de treinar adapter).
-    - Se ``merged_model_dir`` existir e for pasta válida **com pesos** (e **não** ``base_only``), carrega só o modelo fundido.
-    - Senão: base ``model_name`` + ``PeftModel`` em ``adapter_dir``.
+) -> tuple[AutoTokenizer, torch.nn.Module]:
+    p = merged_model_dir.resolve()
+    if not p.is_dir() or not (p / "config.json").is_file():
+        raise FileNotFoundError(
+            f"Pasta do modelo fundido inválida (falta config.json): {merged_model_dir}"
+        )
+    if not hf_local_dir_has_model_weights(p):
+        raise FileNotFoundError(
+            f"Modelo fundido sem pesos carregáveis (.safetensors / .bin): {merged_model_dir}. "
+            "Corre merge_lora.py e confirma que o merge terminou."
+        )
 
-    O terceiro valor devolvido é o caminho do merge **efetivamente** usado, ou ``None`` se carregou base+adapter ou só base.
-
-    **Performance (GPU):** `ORACULO_ATTN_IMPLEMENTATION` (padrão ``sdpa``), matmul `ORACULO_MATMUL_PRECISION`,
-    opcional `ORACULO_TORCH_COMPILE=1` e `ORACULO_CUDNN_BENCHMARK=1` — ver comentário em `server/.env.example`.
-    """
     _apply_cuda_runtime_prefs()
     use_cuda = torch.cuda.is_available()
     if use_cuda:
@@ -235,43 +194,8 @@ def load_lora_pipeline(
                     continue
         raise RuntimeError(f"Falha ao carregar o modelo: {weights_ref!r}")
 
-    merged: Path | None = None
-    if not base_only and merged_model_dir is not None and merged_model_dir.is_dir():
-        if (merged_model_dir / "config.json").is_file():
-            if hf_local_dir_has_model_weights(merged_model_dir):
-                merged = merged_model_dir
-            else:
-                print(
-                    f"Aviso: pasta fundida incompleta (sem pesos .safetensors/.bin): {merged_model_dir}. "
-                    "A usar modelo base + adapter (ou defina --base-only / ORACULO_BASE_ONLY=1 se não tiver LoRA).",
-                    file=sys.stderr,
-                    flush=True,
-                )
-
-    if merged is not None:
-        tokenizer = AutoTokenizer.from_pretrained(
-            str(merged), trust_remote_code=trust_remote_code
-        )
-        model = _load_causal_pretrained(str(merged))
-    else:
-        _reject_gguf_only_hub_id(model_name)
-        if base_only:
-            tokenizer = AutoTokenizer.from_pretrained(
-                model_name, trust_remote_code=trust_remote_code
-            )
-            model = _load_causal_pretrained(model_name)
-        else:
-            if adapter_dir is None or not adapter_dir.is_dir():
-                raise FileNotFoundError(
-                    f"Adapter não encontrado: {adapter_dir}. "
-                    "Treine com train_lora.py, passe --merged_model_dir, "
-                    "ou use --base-only (ORACULO_BASE_ONLY=1) para carregar só o modelo base do Hub."
-                )
-            tokenizer = AutoTokenizer.from_pretrained(
-                model_name, trust_remote_code=trust_remote_code
-            )
-            model = _load_causal_pretrained(model_name)
-            model = PeftModel.from_pretrained(model, str(adapter_dir))
+    tokenizer = AutoTokenizer.from_pretrained(str(p), trust_remote_code=trust_remote_code)
+    model = _load_causal_pretrained(str(p))
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -286,7 +210,7 @@ def load_lora_pipeline(
     model = _maybe_compile_model(model)
     _forward_warmup(tokenizer, model)
 
-    return tokenizer, model, merged
+    return tokenizer, model
 
 
 def generate_chat_reply(
@@ -299,8 +223,7 @@ def generate_chat_reply(
     top_p: float = 0.9,
     do_sample: bool = True,
 ) -> str:
-    """``messages``: lista de ``{\"role\": \"user\"|\"assistant\", \"content\": str}``."""
-    model_inputs = _apply_chat_template(
+    model_inputs = apply_chat_template(
         tokenizer,
         messages,
         tokenize=True,
@@ -326,8 +249,7 @@ def generate_chat_reply(
         )
 
     new_tokens = out[0, input_ids.shape[1] :]
-    reply = tokenizer.decode(new_tokens, skip_special_tokens=True)
-    return reply
+    return tokenizer.decode(new_tokens, skip_special_tokens=True)
 
 
 def generate_chat_reply_stream(
@@ -341,12 +263,7 @@ def generate_chat_reply_stream(
     do_sample: bool = True,
     cancel_event: Event | None = None,
 ) -> Iterator[str]:
-    """
-    Igual a ``generate_chat_reply``, mas produz **pedaços de texto** à medida que o modelo gera
-    (para SSE no servidor). O Hugging Face pode devolver texto acumulado ou por token; normalizamos
-    para **deltas** (só o que é novo em cada passo).
-    """
-    model_inputs = _apply_chat_template(
+    model_inputs = apply_chat_template(
         tokenizer,
         messages,
         tokenize=True,

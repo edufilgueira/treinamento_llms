@@ -14,10 +14,10 @@ from typing import Any
 import bcrypt
 import psycopg2
 
-from pg_db import get_connection, init_schema
+from .pg_db import get_connection, init_schema
 
 _db_lock = threading.Lock()
-_SERVER_DIR = Path(__file__).resolve().parent
+_SERVER_DIR = Path(__file__).resolve().parent.parent
 
 # Texto inicial em app_global; o admin pode editar.
 _DEFAULT_GLOBAL_SYSTEM_PROMPT = (

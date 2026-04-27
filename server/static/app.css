@@ -1877,7 +1877,6 @@ body.auth-page {
 }
 
 /* display:grid acima anula o [hidden] nativo; forçar esconder blocos só-admin */
-#settings-model-params[hidden],
 #settings-block-global[hidden],
 #settings-block-llama[hidden] {
   display: none !important;

@@ -1,16 +1,31 @@
-# Servidor local LoRA (`serve_lora.py`)
+# Servidor Oráculo (`serve_lora.py` → `server/main.py`)
 
-Este diretório contém o **servidor HTTP** que carrega o modelo **uma única vez** e responde a pedidos de chat. Assim não precisas de voltar a carregar vários gigabytes sempre que quiseres uma resposta (como aconteceria ao correr `trein/inferir.py` de cada vez).
+Este diretório contém o **servidor HTTP** (FastAPI) que carrega o motor de inferência **uma única vez** e responde a pedidos de chat.
 
 ## Variáveis de ambiente (PostgreSQL, etc.)
 
 Copia `server/.env.example` para **`server/.env`** (ou cria `.env` na **raiz** do repo) e preenche pelo menos **`ORACULO_PG_HOST`** e o resto de `ORACULO_PG_*`. O `serve_lora.py` **não arranca** se não existir nenhum desses ficheiros. Carrega primeiro `.env` na raiz e depois **`server/.env`**, que **substitui** chaves repetidas.
 
+## Estrutura do código (`server/`)
+
+| Pasta / ficheiro | Função |
+|------------------|--------|
+| `serve_lora.py` | Entrada: `PYTHONPATH`, `.env`, chama `server.main`. |
+| `main.py` | `FastAPI`, *lifespan*, middleware, inclui routers. |
+| `bootstrap.py` | Carrega `.env` e valida `ORACULO_PG_HOST`. |
+| `api/v1/` | Rotas OpenAI-compat (`/v1/chat/completions`, `/v1/models`). |
+| `api/web/` | Chat, auth, sessões, páginas estáticas. |
+| `inference/` | *Runtime* (HF fundido, GGUF, llama-server HTTP). |
+| `db/` | PostgreSQL (`pg_db`, `auth_db`, `chat_sessions_db`). |
+| `schemas/` | Modelos Pydantic da API web. |
+| `services/` | Lógica sem HTTP (ex. preferências de chat). |
+| `static/` | UI (HTML, JS, CSS). |
+
 ## O que precisas antes
 
-1. **Raiz do projeto** — a pasta *pai* desta (`server/`), com `server/requirements.txt` (e opcionalmente `requirements.txt` na raiz que junta treino+servidor), `trein/data_config.py` (config partilhada), `server/lora_engine.py` e `model_service/` (inferência + API `/v1` OpenAI-compat).
+1. **Raiz do projeto** — pasta *pai* de `server/`, com `server/requirements.txt`, `trein/data_config.py` (caminhos por omissão do merge / GGUF).
 
-2. **Treino concluído** — normalmente existirá `trein/outputs/lora_adapter/` com o adapter gerado pelo `trein/train_lora.py` (ou um modelo fundido em `trein/outputs/merged_model/` após o `trein/merge_lora.py`).
+2. **Modelo para servir** — em modo **HF**: pasta **fundida** (`trein/merge_lora.py` → `trein/outputs/merged_model/` ou `ORACULO_MERGED_MODEL_DIR`). Em modo **gguf** ou **llama-server**, vê secções abaixo; não é necessário adapter em runtime.
 
 3. **Dependências** — na raiz do projeto:
 
@@ -29,7 +44,7 @@ Copia `server/.env.example` para **`server/.env`** (ou cria `.env` na **raiz** d
 ```bash
 cd /caminho/para/TREINAMENTO\ LLM
 python3 server/serve_lora.py
-python3 server/serve_lora.py --base-only --model_name Qwen/Qwen3-8B --trust_remote_code
+python3 server/serve_lora.py --inference-backend gguf --gguf-path tools/quantized_model/modelo.gguf
 ```
 
 Atalho com venv:
@@ -51,25 +66,11 @@ Na primeira execução vês na consola mensagens do tipo “A carregar modelo…
 
 A página em `server/static/index.html` oferece um chat simples: escreves a mensagem, pressionas Enter ou “Enviar”, e a resposta aparece abaixo. O histórico da conversa é enviado de volta ao servidor para o modelo manter o contexto (dentro do limite do modelo).
 
-## De onde vêm o modelo base e o LoRA
+## Modo PyTorch (HF): só modelo fundido
 
-Os valores **por omissão** vêm de `../trein/data_config.py`:
+O servidor **não** carrega base + LoRA em runtime. Para `ORACULO_INFERENCE_BACKEND=hf` (padrão), é obrigatória uma pasta de **merge completo** (safetensors + `config.json`), por omissão `DEFAULT_MERGED_MODEL_DIR` em `trein/data_config.py`, ou `ORACULO_MERGED_MODEL_DIR` / `--merged_model_dir`.
 
-| Definição | Significado |
-|-----------|-------------|
-| `DEFAULT_MODEL_NAME` | ID do modelo base no Hugging Face (tem de ser o **mesmo** usado no treino). |
-| `DEFAULT_ADAPTER_DIR` | Pasta do adapter (por defeito `trein/outputs/lora_adapter`). |
-| `DEFAULT_MERGED_MODEL_DIR` | Pasta do modelo fundido (`trein/outputs/merged_model`). |
-
-Se alterares estes campos **uma vez** no `trein/data_config.py`, o servidor, o `trein/inferir.py` e o treino continuam alinhados.
-
-## Modelo fundido vs base + LoRA
-
-Ao arrancar, o script tenta usar o modelo **fundido** se existir `trein/outputs/merged_model/config.json`. Nesse caso carrega só essa pasta (mais simples para inferência).
-
-Se não houver modelo fundido, carrega o **modelo base** (`DEFAULT_MODEL_NAME`) mais o adapter em `DEFAULT_ADAPTER_DIR`.
-
-Podes forçar caminhos na linha de comando (ver abaixo).
+O treino (`train_lora.py`) e o `merge_lora.py` continuam a usar adapter no pipeline offline; só o **servidor** espera o resultado já fundido.
 
 ## Inferência HF (PyTorch) vs GGUF (`.gguf` quantizado)
 
@@ -102,11 +103,9 @@ O **modelo** em si continua a ser o ficheiro `.gguf` que passas ao `llama-server
 
 ```text
 python3 server/serve_lora.py [--host 0.0.0.0] [--port 8765] \
-  [--model_name ID_NO_HUB] \
-  [--adapter_dir /caminho/para/lora_adapter] \
   [--merged_model_dir /caminho/para/merged_model] \
   [--inference-backend hf|gguf] [--gguf-path /caminho/modelo.gguf] \
-  [--trust_remote_code]
+  [--trust_remote_code] [--ui-only]
 ```
 
 **Padrão:** `--host 0.0.0.0` (acesso a partir de outras máquinas na rede, se o firewall permitir).
@@ -115,7 +114,7 @@ Exemplos:
 
 - **Só este PC:** `--host 127.0.0.1`
 - Outra porta: `--port 8080`
-- Modelo base diferente do `data_config.py`: `--model_name TinyLlama/TinyLlama-1.1B-Chat-v1.0`
+- **HF:** pasta fundida explícita: `--merged_model_dir trein/outputs/merged_model`
 
 ## API HTTP (para integrações)
 
@@ -160,7 +159,7 @@ curl -s http://127.0.0.1:8765/api/chat \
 
 - **OpenAI-compat** — `POST /v1/chat/completions`, `GET /v1/models` (subconjunto útil para clientes com `base_url` apontando para `http://<host>:<porta>/v1`). Corpo e resposta seguem o formato habitual (`messages`, `max_tokens`, `stream`, `choices`, `usage`, etc.). Ferramentas / `tool` roles não estão implementadas.  
   - Se definires **`ORACULO_OPENAI_API_KEY`** em `server/.env`, todos os pedidos a `/v1/*` devem enviar `Authorization: Bearer <essa chave>`. Sem a variável, `/v1/*` aceita pedidos **sem** Bearer (só em rede confiável).  
-  - O motor partilhado com estas rotas está no pacote **`model_service/`** (raiz do repo); este diretório `server/` continua a ser a camada web (FastAPI, auth, estáticos).
+  - O *runtime* partilhado está em **`server/inference/`**; as rotas `/v1` em **`server/api/v1/`**.
 
 ## Memória e desempenho
 
@@ -172,5 +171,5 @@ Só é processado **um pedido de geração de cada vez** (fila interna), para ev
 
 - **Erro ao importar módulos** — corre a partir da **raiz** do repo, não dentro de `server/` com outro `cwd`, a menos que ajustes o `PYTHONPATH` manualmente.
 - **`ModuleNotFoundError: fastapi`** — `pip install -r server/requirements.txt` (a partir da raiz do repositório).
-- **Modelo não carrega / pasta não encontrada** — confirma que `trein/outputs/lora_adapter` existe após o treino, ou passa `--adapter_dir` / treina de novo. Para fundido, verifica `config.json` dentro da pasta merged.
+- **Modelo não carrega / pasta não encontrada** — em modo HF, confirma o **merge** (`trein/merge_lora.py`) e que a pasta tem pesos `.safetensors` e `config.json`. Em gguf/llama-server, verifica caminho ou URL.
 - **Porta ocupada** — usa `--port 8766` (ou outra porta livre).

@@ -407,10 +407,6 @@
   const settingsBlockGlobal = document.getElementById("settings-block-global");
   const settingsGlobalSystemPrompt = document.getElementById("settings-global-system-prompt");
   const settingsSystemPrompt = document.getElementById("settings-system-prompt");
-  const settingsModelParams = document.getElementById("settings-model-params");
-  const settingsMaxTokens = document.getElementById("settings-max-tokens");
-  const settingsTemp = document.getElementById("settings-temp");
-  const settingsTopP = document.getElementById("settings-top-p");
   const settingsBlockLlama = document.getElementById("settings-block-llama");
   const settingsLlamaEnabled = document.getElementById("settings-llama-enabled");
   const settingsLlamaHost = document.getElementById("settings-llama-host");
@@ -533,9 +529,6 @@
     if (settingsBlockGlobal) {
       settingsBlockGlobal.hidden = true;
     }
-    if (settingsModelParams) {
-      settingsModelParams.hidden = true;
-    }
     if (settingsBlockLlama) {
       settingsBlockLlama.hidden = true;
     }
@@ -556,27 +549,13 @@
         if (settingsBlockGlobal) {
           settingsBlockGlobal.hidden = !currentUserIsAdmin;
         }
-        let hideAdminModelGrid = false;
-        try {
-          const rs = await apiFetch("/api/status", { method: "GET" });
-          if (rs.ok) {
-            const st = await rs.json();
-            if (st.loaded && st.backend === "llama_server") {
-              hideAdminModelGrid = true;
-            }
-          }
-        } catch (_) {}
-        if (settingsModelParams) {
-          settingsModelParams.hidden = !currentUserIsAdmin || hideAdminModelGrid;
-        }
         if (settingsBlockLlama) {
           settingsBlockLlama.hidden = !currentUserIsAdmin;
         }
         if (settingsModalHint) {
           if (currentUserIsAdmin) {
-            settingsModalHint.textContent = hideAdminModelGrid
-              ? "Inferência via llama-server: ajusta a secção «Llama HTTP» (tokens, temperatura, penalidades). Reinicia o Oráculo após mudar IP, porta ou «Usar llama-server»."
-              : "Como administrador, edita o prompt global, o teu prompt pessoal, os parâmetros locais (HF/GGUF) e a ligação ao llama-server abaixo.";
+            settingsModalHint.textContent =
+              "Como administrador: prompt global, prompt pessoal, e na secção abaixo os parâmetros de geração (tokens, temperatura, llama-server, etc.). Reinicia o Oráculo após mudar IP, porta ou «Usar llama-server».";
           } else {
             settingsModalHint.textContent =
               "Ajusta o teu system prompt; ele junta-se ao prompt global do serviço em cada geração. Os parâmetros do modelo são fixos na conta de utilizador.";
@@ -587,17 +566,6 @@
         }
         if (settingsGlobalSystemPrompt) {
           settingsGlobalSystemPrompt.value = j.global_system_prompt != null ? j.global_system_prompt : "";
-        }
-        if (currentUserIsAdmin) {
-          if (settingsMaxTokens) {
-            settingsMaxTokens.value = String(j.max_new_tokens);
-          }
-          if (settingsTemp) {
-            settingsTemp.value = String(j.temperature);
-          }
-          if (settingsTopP) {
-            settingsTopP.value = String(j.top_p);
-          }
         }
         if (currentUserIsAdmin && j.llama_server) {
           const L = j.llama_server;
@@ -695,18 +663,6 @@
       body.global_system_prompt = settingsGlobalSystemPrompt
         ? settingsGlobalSystemPrompt.value
         : "";
-      body.max_new_tokens = settingsMaxTokens ? parseInt(String(settingsMaxTokens.value), 10) : 2048;
-      body.temperature = settingsTemp ? parseFloat(String(settingsTemp.value)) : 0.7;
-      body.top_p = settingsTopP ? parseFloat(String(settingsTopP.value)) : 0.9;
-      if (isNaN(body.max_new_tokens)) {
-        body.max_new_tokens = 2048;
-      }
-      if (isNaN(body.temperature)) {
-        body.temperature = 0.7;
-      }
-      if (isNaN(body.top_p)) {
-        body.top_p = 0.9;
-      }
       const lp = settingsLlamaPort ? parseInt(String(settingsLlamaPort.value), 10) : 8080;
       const lnCtx = settingsLlamaNCtx ? parseInt(String(settingsLlamaNCtx.value), 10) : 4096;
       const lMax = settingsLlamaMaxTokens ? parseInt(String(settingsLlamaMaxTokens.value), 10) : 2048;

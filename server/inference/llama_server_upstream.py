@@ -36,7 +36,7 @@ def chat_template_kwargs_from_env() -> dict[str, Any] | None:
 
 def resolve_chat_template_kwargs_merged() -> dict[str, Any] | None:
     """Env ORACULO_LLAMA_CPP_CHAT_TEMPLATE_KWARGS + reasoning (off/on/auto) da base (admin)."""
-    from auth_db import get_llama_server_settings
+    from server.db.auth_db import get_llama_server_settings
 
     base = chat_template_kwargs_from_env()
     out: dict[str, Any] = dict(base) if base else {}
@@ -51,7 +51,7 @@ def resolve_chat_template_kwargs_merged() -> dict[str, Any] | None:
 
 def payload_sampling_extras_from_db() -> dict[str, Any]:
     """Campos extra para /v1/chat/completions (repeat_penalty, etc.) vindos da base."""
-    from auth_db import get_llama_server_settings
+    from server.db.auth_db import get_llama_server_settings
 
     s = get_llama_server_settings()
     return {

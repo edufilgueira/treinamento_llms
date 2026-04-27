@@ -8,7 +8,7 @@ import re
 import threading
 from typing import Any
 
-from pg_db import get_connection, init_schema
+from .pg_db import get_connection, init_schema
 
 _db_lock = threading.Lock()
 

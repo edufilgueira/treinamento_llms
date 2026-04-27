@@ -1,0 +1,1 @@
+"""PostgreSQL: esquema, utilizadores, sessões."""

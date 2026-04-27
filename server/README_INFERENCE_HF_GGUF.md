@@ -4,7 +4,7 @@ O mesmo servidor (`server/serve_lora.py`) pode arrancar de duas formas:
 
 | Modo     | O que carrega | Dependências |
 |----------|---------------|--------------|
-| **hf**   | `transformers` + `peft` — merge fundido *ou* base + LoRA (pastas `trein/outputs/...`) | `server/requirements.txt` (torch, etc.) |
+| **hf**   | `transformers` — **só** pasta do modelo **fundido** (safetensors em `trein/outputs/merged_model` ou `ORACULO_MERGED_MODEL_DIR`) | `server/requirements.txt` (torch, etc.) |
 | **gguf** | Ficheiro **.gguf** (ex. Q4_K_M produzido com llama.cpp fora do Python)        | + `server/requirements-gguf.txt`         |
 
 - **Não** é preciso trocar de projecto: a UI, a base de dados, auth e a API **HTTP** mantêm-se; muda **só** o motor de geração de texto.
@@ -35,9 +35,9 @@ Se `import llama_cpp` falhar, veja a [documentação de instalação do llama-cp
 - Modo **GGUF**:
   - `ORACULO_INFERENCE_BACKEND=gguf`
   - `ORACULO_GGUF_PATH=/caminho/absoluto/para/meu_modelo_Q4_K_M.gguf` (se não usar o ficheiro default)
-- Modo **HF** (comportamento anterior):
+- Modo **HF**:
   - `ORACULO_INFERENCE_BACKEND=hf` (ou omitir, é o padrão)
-  - `ORACULO_MERGED_MODEL_DIR` / `ORACULO_ADAPTER_DIR` etc., como antes
+  - `ORACULO_MERGED_MODEL_DIR` (pasta do merge completo) ou ficheiro por omissão em `data_config.py`
 
 ### Linha de comando (sobrepõe o default do env, quando indicado)
 

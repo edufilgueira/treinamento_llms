@@ -1,20 +1,13 @@
 """
-Runtime único do modelo: HF (PyTorch), .gguf local (llama-cpp-python) **ou** llama-server HTTP.
-Usado pelo servidor web e pela API /v1/chat/completions.
+Runtime único: Hugging Face (modelo fundido), .gguf local ou llama-server HTTP.
 """
 
 from __future__ import annotations
 
-import sys
 import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
-
-_MS_ROOT = Path(__file__).resolve().parent.parent
-for _p in (_MS_ROOT / "trein", _MS_ROOT / "server"):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
 
 _runtime_singleton: "ModelRuntime | None" = None
 
@@ -114,39 +107,28 @@ class ModelRuntime:
         self._mode = ""
         self._model_id = ""
 
-    def load(
+    def load_hf_merged(
         self,
-        model_name: str,
-        adapter_dir: Path,
-        merged: Path | None,
+        merged_model_dir: Path,
         *,
-        base_only: bool = False,
         trust_remote_code: bool = False,
     ) -> None:
-        from lora_engine import load_lora_pipeline
+        from .hf_engine import load_merged_pipeline
 
         self.ui_only = False
         self._llm = None
         self._upstream_base = None
         self._upstream_api_key = ""
         self._backend = "hf"
-        tokenizer, model, merged_used = load_lora_pipeline(
-            model_name,
-            adapter_dir,
-            merged,
-            base_only=base_only,
+        tokenizer, model = load_merged_pipeline(
+            merged_model_dir,
             trust_remote_code=trust_remote_code,
             fix_generation_max_length=True,
         )
         self._tokenizer = tokenizer
         self._model = model
-        if merged_used is not None:
-            self._mode = "fundido"
-        elif base_only:
-            self._mode = "base"
-        else:
-            self._mode = "base+LoRA"
-        self._model_id = str(merged_used.resolve()) if merged_used is not None else model_name
+        self._mode = "fundido"
+        self._model_id = str(merged_model_dir.resolve())
 
     def load_gguf(self, gguf_path: Path) -> None:
         from .gguf_engine import load_llama
@@ -186,7 +168,6 @@ class ModelRuntime:
         self._model_id = mid
         self._backend = "llama_server"
         self._mode = "llama_server"
-        # Valida ORACULO_LLAMA_CPP_CHAT_TEMPLATE_KWARGS e lê reasoning da base.
         resolve_chat_template_kwargs_merged()
 
     def upstream_api_key(self) -> str | None:
@@ -273,7 +254,7 @@ class ModelRuntime:
                         self._last_openai_usage = usage
                 return text
 
-            from lora_engine import generate_chat_reply
+            from .hf_engine import generate_chat_reply
 
             if self._tokenizer is None or self._model is None:
                 raise RuntimeError("Modelo não carregado.")
@@ -340,7 +321,7 @@ class ModelRuntime:
                 )
                 return
 
-            from lora_engine import generate_chat_reply_stream
+            from .hf_engine import generate_chat_reply_stream
 
             if self._tokenizer is None or self._model is None:
                 raise RuntimeError("Modelo não carregado.")

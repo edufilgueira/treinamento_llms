@@ -24,13 +24,6 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
-def _env_flag(name: str, default: bool) -> bool:
-    raw = (os.environ.get(name) or "").strip().lower()
-    if not raw:
-        return default
-    return raw in ("1", "true", "yes", "on")
-
-
 # Qwen3 (e similares) podem emitir raciocínio entre marcas; o template HF usa enable_thinking=False,
 # mas o GGUF (llama.cpp) precisa de chat_template_kwargs e/ou pós-processamento.
 _THINKING_BLOCK_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -101,8 +94,6 @@ def _qwen_chat_template_extra() -> dict[str, Any]:
 
 
 def _create_chat_completion(llm: Any, **kwargs: Any) -> Any:
-    if _env_flag("ORACULO_GGUF_ENABLE_THINKING", False):
-        return llm.create_chat_completion(**kwargs)
     try:
         return llm.create_chat_completion(**kwargs, **_qwen_chat_template_extra())
     except TypeError:
@@ -112,18 +103,14 @@ def _create_chat_completion(llm: Any, **kwargs: Any) -> Any:
 def _gguf_jinja_chat_prompt(
     llm: Any,
     messages: list[dict[str, str]],
-    *,
-    enable_thinking: bool,
 ) -> Any | None:
     """
-    Aplica o chat template Jinja embutido no GGUF com ``enable_thinking`` explícito.
+    Aplica o chat template Jinja embutido no GGUF com ``enable_thinking: false``.
 
     O ``create_chat_completion`` do llama-cpp-python **não** encaminha
     ``chat_template_kwargs`` ao formatter (só lista fixa de argumentos), por isso
     o caminho fiável para Qwen3 é renderizar aqui e usar ``create_completion``.
     """
-    if _env_flag("ORACULO_GGUF_DISABLE_JINJA_NO_THINK", False):
-        return None
     try:
         from llama_cpp.llama_chat_format import Jinja2ChatFormatter
     except ImportError:
@@ -147,20 +134,12 @@ def _gguf_jinja_chat_prompt(
         add_generation_prompt=True,
         stop_token_ids=stop_ids if stop_ids else None,
     )
-    extra: dict[str, Any] = {"enable_thinking": enable_thinking}
-    rb_raw = (os.environ.get("ORACULO_GGUF_REASONING_BUDGET") or "").strip()
-    if rb_raw:
-        try:
-            extra["reasoning_budget"] = int(rb_raw, 10)
-        except ValueError:
-            pass
-    elif not enable_thinking:
-        extra["reasoning_budget"] = 0
+    extra: dict[str, Any] = {"enable_thinking": False, "reasoning_budget": 0}
     try:
         return fmt(messages=messages, **extra)
     except Exception:
         try:
-            return fmt(messages=messages, enable_thinking=enable_thinking)
+            return fmt(messages=messages, enable_thinking=False)
         except Exception:
             return None
 
@@ -174,10 +153,6 @@ def _stops_for_completion(formatted: Any) -> list[str]:
     if isinstance(raw, list):
         return [s for s in raw if s]
     return []
-
-
-def _use_jinja_no_think_path() -> bool:
-    return not _env_flag("ORACULO_GGUF_ENABLE_THINKING", False)
 
 
 def load_llama(
@@ -203,11 +178,10 @@ def load_llama(
         n_gpu_layers=n_gpu,
         verbose=False,
     )
-    if not _env_flag("ORACULO_GGUF_ENABLE_THINKING", False):
-        try:
-            return Llama(**common, **_qwen_chat_template_extra())
-        except TypeError:
-            pass
+    try:
+        return Llama(**common, **_qwen_chat_template_extra())
+    except TypeError:
+        pass
     return Llama(**common)
 
 
@@ -230,9 +204,7 @@ def generate_chat_reply_gguf(
     top_p: float = 0.9,
 ) -> tuple[str, dict[str, int] | None]:
     msgs = _messages_for_llama(messages)
-    formatted = None
-    if _use_jinja_no_think_path():
-        formatted = _gguf_jinja_chat_prompt(llm, msgs, enable_thinking=False)
+    formatted = _gguf_jinja_chat_prompt(llm, msgs)
 
     if formatted is not None:
         response = llm.create_completion(
@@ -252,9 +224,7 @@ def generate_chat_reply_gguf(
                 "total_tokens": int(usage.get("total_tokens", 0) or 0),
             }
         choice = (response.get("choices") or [{}])[0]
-        text = (choice.get("text") or "").strip()
-        if not _env_flag("ORACULO_GGUF_ENABLE_THINKING", False):
-            text = _strip_thinking_blocks(text)
+        text = _strip_thinking_blocks((choice.get("text") or "").strip())
         return text, u_out
 
     response = _create_chat_completion(
@@ -275,9 +245,7 @@ def generate_chat_reply_gguf(
         }
     choice = (response.get("choices") or [{}])[0]
     msg = choice.get("message") or {}
-    text = (msg.get("content") or "").strip()
-    if not _env_flag("ORACULO_GGUF_ENABLE_THINKING", False):
-        text = _strip_thinking_blocks(text)
+    text = _strip_thinking_blocks((msg.get("content") or "").strip())
     return text, u_out
 
 
@@ -291,9 +259,7 @@ def generate_chat_reply_stream_gguf(
     cancel_event: threading.Event | None = None,
 ) -> Iterator[str]:
     msgs = _messages_for_llama(messages)
-    formatted = None
-    if _use_jinja_no_think_path():
-        formatted = _gguf_jinja_chat_prompt(llm, msgs, enable_thinking=False)
+    formatted = _gguf_jinja_chat_prompt(llm, msgs)
 
     if formatted is not None:
         stream = llm.create_completion(
@@ -319,12 +285,7 @@ def generate_chat_reply_stream_gguf(
                 if piece:
                     yield piece
 
-        if _env_flag("ORACULO_GGUF_ENABLE_THINKING", False):
-            yield from _completion_stream_texts()
-        elif _env_flag("ORACULO_GGUF_STREAM_STRIP_THINKING", False):
-            yield from _stream_skip_leading_thinking(_completion_stream_texts())
-        else:
-            yield from _completion_stream_texts()
+        yield from _completion_stream_texts()
         return
 
     stream = _create_chat_completion(
@@ -351,12 +312,7 @@ def generate_chat_reply_stream_gguf(
             if content:
                 yield content
 
-    text_iter = (
-        _delta_texts()
-        if _env_flag("ORACULO_GGUF_ENABLE_THINKING", False)
-        else _stream_skip_leading_thinking(_delta_texts())
-    )
-    yield from text_iter
+    yield from _stream_skip_leading_thinking(_delta_texts())
 
 
 def count_output_tokens_gguf(llm: Any, text: str) -> int:

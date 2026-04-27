@@ -5,7 +5,7 @@ Este documento explica **passo a passo** como usar os scripts, **para que serve*
 ## Estrutura do repositório
 
 - **`trein/`** — `data_config.py`, `train_lora.py`, `inferir.py`, `data/`, `outputs/`. [trein/README.md](trein/README.md).
-- **`server/`** — API (FastAPI), ficheiros estáticos da UI, `lora_engine.py`, ligação PostgreSQL; **credenciais e variáveis de ambiente** do Oráculo: copiar [server/.env.example](server/.env.example) para `server/.env` e preencher. Guia: [server/README.md](server/README.md).
+- **`server/`** — API (FastAPI), `server/inference/`, `server/db/`, estáticos; **credenciais** em [server/.env.example](server/.env.example) → `server/.env`. Guia: [server/README.md](server/README.md).
 - **Raiz** — `README.md` (este ficheiro); `requirements.txt` junta `trein/` + `server/`; ou instale só [trein/requirements.txt](trein/requirements.txt) / [server/requirements.txt](server/requirements.txt). (Opcional: `.env` na raiz; o Oráculo também lê `server/.env`, que tem prioridade.)
 
 ---
