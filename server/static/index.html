@@ -315,8 +315,14 @@
             </select>
           </div>
           <div>
-            <label class="modal__label" for="settings-llama-reasoning-budget">Reasoning budget</label>
-            <input type="number" id="settings-llama-reasoning-budget" class="modal__input" min="-1" max="1000000" step="1" />
+            <span class="modal__label">Reasoning budget</span>
+            <label
+              class="modal__check modal__check--block"
+              title="Desligado: 0. Ligado: −1 (orçamento ilimitado no llama-server, se o modelo suportar)."
+            >
+              <input type="checkbox" id="settings-llama-reasoning-budget-on" />
+              <span>Ligado</span>
+            </label>
           </div>
         </div>
       </div>

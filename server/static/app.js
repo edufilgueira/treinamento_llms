@@ -418,7 +418,7 @@
   const settingsLlamaRepeatPenalty = document.getElementById("settings-llama-repeat-penalty");
   const settingsLlamaRepeatLastN = document.getElementById("settings-llama-repeat-last-n");
   const settingsLlamaReasoning = document.getElementById("settings-llama-reasoning");
-  const settingsLlamaReasoningBudget = document.getElementById("settings-llama-reasoning-budget");
+  const settingsLlamaReasoningBudgetOn = document.getElementById("settings-llama-reasoning-budget-on");
   let currentUserIsAdmin = false;
 
   function isAdminFromApi(v) {
@@ -599,10 +599,9 @@
           if (settingsLlamaReasoning) {
             settingsLlamaReasoning.value = L.reasoning != null ? String(L.reasoning) : "off";
           }
-          if (settingsLlamaReasoningBudget) {
-            settingsLlamaReasoningBudget.value = String(
-              L.reasoning_budget != null ? L.reasoning_budget : 0
-            );
+          if (settingsLlamaReasoningBudgetOn) {
+            const rb = L.reasoning_budget != null ? Number(L.reasoning_budget) : 0;
+            settingsLlamaReasoningBudgetOn.checked = rb !== 0;
           }
         }
       }
@@ -667,9 +666,8 @@
       const lnCtx = settingsLlamaNCtx ? parseInt(String(settingsLlamaNCtx.value), 10) : 4096;
       const lMax = settingsLlamaMaxTokens ? parseInt(String(settingsLlamaMaxTokens.value), 10) : 2048;
       const lRn = settingsLlamaRepeatLastN ? parseInt(String(settingsLlamaRepeatLastN.value), 10) : 512;
-      const lRb = settingsLlamaReasoningBudget
-        ? parseInt(String(settingsLlamaReasoningBudget.value), 10)
-        : 0;
+      const lRb =
+        settingsLlamaReasoningBudgetOn && settingsLlamaReasoningBudgetOn.checked ? -1 : 0;
       body.llama = {
         upstream_enabled: !!(settingsLlamaEnabled && settingsLlamaEnabled.checked),
         api_host: settingsLlamaHost ? String(settingsLlamaHost.value).trim() : "127.0.0.1",
@@ -683,7 +681,7 @@
           : 1.15,
         repeat_last_n: isNaN(lRn) ? 512 : lRn,
         reasoning: settingsLlamaReasoning ? String(settingsLlamaReasoning.value) : "off",
-        reasoning_budget: isNaN(lRb) ? 0 : lRb,
+        reasoning_budget: lRb,
       };
       if (isNaN(body.llama.temperature)) {
         body.llama.temperature = 0.8;

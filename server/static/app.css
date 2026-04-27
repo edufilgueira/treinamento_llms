@@ -1918,6 +1918,11 @@ body.auth-page {
   flex-shrink: 0;
 }
 
+.modal__check--block {
+  margin-top: 0.35rem;
+  margin-bottom: 0;
+}
+
 .modal__grid-2 {
   display: grid;
   grid-template-columns: 1fr;
