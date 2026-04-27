@@ -25,7 +25,7 @@ Copia `server/.env.example` para **`server/.env`** (ou cria `.env` na **raiz** d
 
 1. **Raiz do projeto** — pasta *pai* de `server/`, com `server/requirements.txt`.
 
-2. **llama-server a correr** — o ficheiro `.gguf` é carregado **só** pelo binário `llama-server` (ex. porta `8080`). No `.env` define **`ORACULO_LLAMA_CPP_BASE_URL`** (ex. `http://127.0.0.1:8080`) **ou**, no admin, activa **Usar llama-server** e preenche host/porta.
+2. **llama-server a correr** — o ficheiro `.gguf` é carregado **só** pelo binário `llama-server` (ex. porta `8080`). Se não definires URL no `.env`, usa-se **`http://127.0.0.1:8080`**. Podes fixar **`ORACULO_LLAMA_CPP_BASE_URL`** ou, no admin, activar **Usar llama-server** e preencher host/porta (sobrepõe a omissão no arranque). Com **`ORACULO_LLAMA_CPP_REQUIRE_EXPLICIT_URL=1`** a URL deixa de ser opcional.
 
 3. **Dependências** — na raiz do projeto:
 
