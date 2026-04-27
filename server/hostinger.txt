@@ -1,8 +1,8 @@
 # Notas de deploy (substitui HOST pelo teu servidor; credenciais só em server/.env — não commits).
 
-ssh root@HOST
+ssh root@187.77.44.167
 
-scp lora_adapter.zip root@HOST:/root/treinamento_llms/trein/outputs
+scp merged_qwen3-8B.z02 root@187.77.44.167:/root/treinamento_llms/trein/outputs
 
 scp root@HOST:/root/treinamento_llms/trein/outputs/lora_adapter.zip ./
 

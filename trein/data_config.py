@@ -68,8 +68,8 @@ ROOT = TREIN_ROOT
 DEFAULT_MODEL_NAME = "Qwen/Qwen3-8B"
 
 # --- Pastas de saída do LoRA / merge: sempre trein/outputs/... na raiz do repositório ---
-DEFAULT_ADAPTER_DIR = REPO_ROOT / "trein" / "outputs" / "lora_adapter_/Qwen3-8B"
-DEFAULT_MERGED_MODEL_DIR = REPO_ROOT / "trein" / "outputs" / "merged_Qwen3-8B"
+DEFAULT_ADAPTER_DIR = REPO_ROOT / "trein" / "outputs" / "lora_adapter_qwen3-8b"
+DEFAULT_MERGED_MODEL_DIR = REPO_ROOT / "trein" / "outputs" / "merged_qwen3-8b"
 # Ficheiro GGUF sugerido (llama.cpp / `llama-cpp-python`); ajuste ou use ORACULO_GGUF_PATH.
 DEFAULT_GGUF_PATH = REPO_ROOT / "tools" / "quantized_model" / "Merged_Model-3.1B-Q4_K_M.gguf"
 

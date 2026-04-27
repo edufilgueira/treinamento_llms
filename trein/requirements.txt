@@ -11,6 +11,8 @@
 #
 # Não precisa de gptqmodel / optimum para LoRA em FP32 habitual. Se precisar de checkpoint AWQ/GPTQ no Hub:
 #   pip install -r trein/requirements-quantized.txt
+# apt update && apt install git -y
+# apt install zip -y
 
 torch>=2.1.0,<2.11.0
 transformers>=4.40.0

@@ -1,5 +1,12 @@
 https://github.com/ggerganov/llama.cpp
 
+```bash
+apt install zip -y
+# compactar no servidor
+zip -r -s 1g merged_qwen3-8B.zip merged_qwen3-8B
+# descompactar
+sudo apt install p7zip-full -y
+7z x merged_qwen3-8B.zip
 
 # download
 hf download bartowski/Qwen_Qwen3.6-35B-A3B-GGUF --local-dir ~/models/qwen35b-gguf --max-workers 1
@@ -10,17 +17,24 @@ ps -aux | grep hf
 # Deletar cache de download
 rm -rf ~/models/qwen35b-gguf/.cache/huggingface/download/*.lock
 rm -rf ~/.cache/huggingface/hub/.locks/*
-
+```
 
 # Fluxo: copiar GGUF para treinamento_llm/tools
 ```bash
 ls ~/.cache/huggingface/hub/
 
-ls ~/.cache/huggingface/hub/models--Qwen--Qwen3-8B/snapshotsb968826d9c46dd6066d109eabc6255188de91218
+ls ~/.cache/huggingface/hub/models--Qwen--Qwen3-8B/snapshots/b968826d9c46dd6066d109eabc6255188de91218
 
 ### Ajusta o caminho ao script e ao modelo, conforme a tua versão de llama.cpp:
+## 1) Modelo em repositorio HuggingFace no disco
 python ~/treinamento_llms/tools/llama.cpp/convert_hf_to_gguf.py \
   ~/.cache/huggingface/hub/models--Qwen--Qwen3-8B/snapshots/b968826d9c46dd6066d109eabc6255188de91218/ \
+  --outfile ~/treinamento_llms/tools/quantized_model/Qwen3-8B-F16.gguf \
+  --outtype f16
+
+## 2) Modelo em mergeado HuggingFace no disco
+python ~/treinamento_llms/tools/llama.cpp/convert_hf_to_gguf.py \
+  ~/treinamento_llms/trein/outputs/merged_qwen3-8B \
   --outfile ~/treinamento_llms/tools/quantized_model/Qwen3-8B-F16.gguf \
   --outtype f16
 
