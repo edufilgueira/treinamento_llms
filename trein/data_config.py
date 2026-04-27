@@ -65,11 +65,11 @@ ROOT = TREIN_ROOT
 #
 # Qwen 3B: em GPU usa FP16/BF16; em CPU (FP32) treino LoRA é possível mas pode exigir RAM
 # confortável — train_lora avisa neste caso; TinyLlama é alternativa para CPUs mais limitadas.
-DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-3B-Instruct"
+DEFAULT_MODEL_NAME = "Qwen/Qwen3-8B"
 
 # --- Pastas de saída do LoRA / merge: sempre trein/outputs/... na raiz do repositório ---
-DEFAULT_ADAPTER_DIR = REPO_ROOT / "trein" / "outputs" / "lora_adapter"
-DEFAULT_MERGED_MODEL_DIR = REPO_ROOT / "trein" / "outputs" / "merged_model"
+DEFAULT_ADAPTER_DIR = REPO_ROOT / "trein" / "outputs" / "lora_adapter_/Qwen3-8B"
+DEFAULT_MERGED_MODEL_DIR = REPO_ROOT / "trein" / "outputs" / "merged_Qwen3-8B"
 # Ficheiro GGUF sugerido (llama.cpp / `llama-cpp-python`); ajuste ou use ORACULO_GGUF_PATH.
 DEFAULT_GGUF_PATH = REPO_ROOT / "tools" / "quantized_model" / "Merged_Model-3.1B-Q4_K_M.gguf"
 
