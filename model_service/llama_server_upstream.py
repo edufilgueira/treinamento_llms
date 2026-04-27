@@ -34,6 +34,33 @@ def chat_template_kwargs_from_env() -> dict[str, Any] | None:
     return out if isinstance(out, dict) else None
 
 
+def resolve_chat_template_kwargs_merged() -> dict[str, Any] | None:
+    """Env ORACULO_LLAMA_CPP_CHAT_TEMPLATE_KWARGS + reasoning (off/on/auto) da base (admin)."""
+    from auth_db import get_llama_server_settings
+
+    base = chat_template_kwargs_from_env()
+    out: dict[str, Any] = dict(base) if base else {}
+    s = get_llama_server_settings()
+    r = str(s.get("reasoning") or "off").strip().lower()
+    if r == "off":
+        out["enable_thinking"] = False
+    elif r == "on":
+        out["enable_thinking"] = True
+    return out if out else None
+
+
+def payload_sampling_extras_from_db() -> dict[str, Any]:
+    """Campos extra para /v1/chat/completions (repeat_penalty, etc.) vindos da base."""
+    from auth_db import get_llama_server_settings
+
+    s = get_llama_server_settings()
+    return {
+        "repeat_penalty": float(s["repeat_penalty"]),
+        "repeat_last_n": int(s["repeat_last_n"]),
+        "reasoning_budget": int(s["reasoning_budget"]),
+    }
+
+
 def fetch_default_model_id(base: str, api_key: str | None) -> str:
     headers: dict[str, str] = {}
     if api_key:
@@ -74,6 +101,7 @@ def build_payload(
     top_p: float,
     stream: bool,
     chat_template_kwargs: dict[str, Any] | None,
+    extra_fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     p: dict[str, Any] = {
         "model": model,
@@ -85,6 +113,8 @@ def build_payload(
     }
     if chat_template_kwargs:
         p["chat_template_kwargs"] = chat_template_kwargs
+    if extra_fields:
+        p.update(extra_fields)
     return p
 
 
@@ -98,6 +128,7 @@ def chat_completions_complete(
     top_p: float,
     api_key: str | None,
     chat_template_kwargs: dict[str, Any] | None,
+    extra_fields: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, int] | None]:
     url = urljoin(_base_url(base) + "/", "v1/chat/completions")
     payload = build_payload(
@@ -108,6 +139,7 @@ def chat_completions_complete(
         top_p=top_p,
         stream=False,
         chat_template_kwargs=chat_template_kwargs,
+        extra_fields=extra_fields,
     )
     with httpx.Client(timeout=DEFAULT_TIMEOUT) as client:
         r = client.post(url, json=payload, headers=_headers_json(api_key))
@@ -142,6 +174,7 @@ def chat_completions_stream_deltas(
     api_key: str | None,
     chat_template_kwargs: dict[str, Any] | None,
     cancel_event: threading.Event,
+    extra_fields: dict[str, Any] | None = None,
 ) -> Iterator[str]:
     url = urljoin(_base_url(base) + "/", "v1/chat/completions")
     payload = build_payload(
@@ -152,6 +185,7 @@ def chat_completions_stream_deltas(
         top_p=top_p,
         stream=True,
         chat_template_kwargs=chat_template_kwargs,
+        extra_fields=extra_fields,
     )
     with httpx.Client(timeout=DEFAULT_TIMEOUT) as client:
         with client.stream("POST", url, json=payload, headers=_headers_sse(api_key)) as r:

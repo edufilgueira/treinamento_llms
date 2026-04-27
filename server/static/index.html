@@ -269,6 +269,70 @@
           <input type="number" id="settings-top-p" class="modal__input" min="0.05" max="1" step="0.01" />
         </div>
       </div>
+      <div id="settings-block-llama" class="settings-llama-block" hidden>
+        <hr class="modal__hr" />
+        <h3 class="modal__subh">Llama.cpp (servidor HTTP)</h3>
+        <p class="modal__hint modal__hint--small" id="settings-llama-hint">
+          Liga o Oráculo ao <code>llama-server</code>. O contexto (<code>-c</code>) deve coincidir com o arranque do binário.
+          Após alterar IP, porta ou «Usar llama-server», reinicia o processo <code>serve_lora</code>.
+        </p>
+        <label class="modal__check">
+          <input type="checkbox" id="settings-llama-enabled" />
+          <span>Usar llama-server (inferência via HTTP em vez de GGUF/HF neste processo)</span>
+        </label>
+        <div class="modal__grid-2">
+          <div>
+            <label class="modal__label" for="settings-llama-host">API — host / IP</label>
+            <input type="text" id="settings-llama-host" class="modal__input" placeholder="127.0.0.1" autocomplete="off" />
+          </div>
+          <div>
+            <label class="modal__label" for="settings-llama-port">Porta</label>
+            <input type="number" id="settings-llama-port" class="modal__input" min="1" max="65535" step="1" />
+          </div>
+        </div>
+        <div class="modal__grid-2">
+          <div>
+            <label class="modal__label" for="settings-llama-n-ctx">Contexto n_ctx (referência)</label>
+            <input type="number" id="settings-llama-n-ctx" class="modal__input" min="256" max="1000000" step="1" />
+          </div>
+          <div>
+            <label class="modal__label" for="settings-llama-max-tokens">Máx. tokens novos</label>
+            <input type="number" id="settings-llama-max-tokens" class="modal__input" min="16" max="32768" step="1" />
+          </div>
+        </div>
+        <div class="modal__grid-3">
+          <div>
+            <label class="modal__label" for="settings-llama-temp">Temperature</label>
+            <input type="number" id="settings-llama-temp" class="modal__input" min="0.01" max="2" step="0.01" />
+          </div>
+          <div>
+            <label class="modal__label" for="settings-llama-top-p">Top P</label>
+            <input type="number" id="settings-llama-top-p" class="modal__input" min="0.05" max="1" step="0.01" />
+          </div>
+          <div>
+            <label class="modal__label" for="settings-llama-repeat-penalty">Repeat penalty</label>
+            <input type="number" id="settings-llama-repeat-penalty" class="modal__input" min="0.5" max="2" step="0.01" />
+          </div>
+        </div>
+        <div class="modal__grid-3">
+          <div>
+            <label class="modal__label" for="settings-llama-repeat-last-n">Repeat last N</label>
+            <input type="number" id="settings-llama-repeat-last-n" class="modal__input" min="0" max="131072" step="1" />
+          </div>
+          <div>
+            <label class="modal__label" for="settings-llama-reasoning">Reasoning</label>
+            <select id="settings-llama-reasoning" class="modal__input">
+              <option value="off">off</option>
+              <option value="on">on</option>
+              <option value="auto">auto</option>
+            </select>
+          </div>
+          <div>
+            <label class="modal__label" for="settings-llama-reasoning-budget">Reasoning budget</label>
+            <input type="number" id="settings-llama-reasoning-budget" class="modal__input" min="-1" max="1000000" step="1" />
+          </div>
+        </div>
+      </div>
       <div class="modal__actions">
         <button type="button" class="btn-secondary" id="settings-cancel">Cancelar</button>
         <button type="button" class="btn-primary" id="settings-save">Guardar</button>

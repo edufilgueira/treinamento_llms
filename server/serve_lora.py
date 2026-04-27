@@ -99,12 +99,15 @@ from starlette.middleware.sessions import SessionMiddleware
 from auth_db import (
     create_user,
     get_global_system_prompt,
+    get_llama_server_settings,
     get_user_model_settings,
     get_user_names,
     init_db,
     is_user_admin,
     list_all_users,
+    llama_upstream_base_url_from_db,
     set_global_system_prompt,
+    set_llama_server_settings,
     set_user_display_name,
     set_user_email,
     set_user_model_settings,
@@ -346,13 +349,18 @@ async def lifespan(app: FastAPI):
         rt.ui_only = False
         return
 
-    upstream = _llama_cpp_upstream_url_from_env()
+    db_upstream = llama_upstream_base_url_from_db()
+    upstream = db_upstream or _llama_cpp_upstream_url_from_env()
     if upstream:
         rt.ui_only = False
         api_key = (os.environ.get("ORACULO_LLAMA_CPP_API_KEY") or "").strip() or None
         model_ov = (os.environ.get("ORACULO_LLAMA_CPP_MODEL") or "").strip() or None
         try:
-            print(f"Modo llama-server: delegação de inferência para {upstream!r}…", flush=True)
+            src = "base de dados (admin)" if db_upstream else ".env ORACULO_LLAMA_CPP_BASE_URL"
+            print(
+                f"Modo llama-server ({src}): delegação de inferência para {upstream!r}…",
+                flush=True,
+            )
             rt.load_llama_server(upstream, api_key=api_key, model=model_ov)
             print(f"  Modelo remoto (id na API): {rt.model_id!r}", flush=True)
         except Exception as err:
@@ -504,12 +512,53 @@ class UserProfileUpdate(BaseModel):
     email: str = Field("", max_length=254)
 
 
+class LlamaServerSettingsIn(BaseModel):
+    """Definições do llama.cpp (HTTP) — só admin; persistem em app_global."""
+
+    upstream_enabled: bool | None = None
+    api_host: str | None = Field(None, max_length=256)
+    api_port: int | None = Field(None, ge=1, le=65535)
+    n_ctx: int | None = Field(None, ge=256, le=1_000_000)
+    max_new_tokens: int | None = Field(None, ge=16, le=32768)
+    temperature: float | None = Field(None, ge=0.01, le=2.0)
+    top_p: float | None = Field(None, ge=0.05, le=1.0)
+    repeat_penalty: float | None = Field(None, ge=0.5, le=2.0)
+    repeat_last_n: int | None = Field(None, ge=0, le=131072)
+    reasoning: str | None = Field(None, max_length=16)
+    reasoning_budget: int | None = Field(None, ge=-1, le=1_000_000)
+
+    @field_validator("reasoning")
+    @classmethod
+    def _reasoning_ok(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        t = (v or "").strip().lower()
+        if t not in ("off", "on", "auto"):
+            raise ValueError("reasoning: use off, on ou auto.")
+        return t
+
+
+class LlamaServerSettingsOut(BaseModel):
+    upstream_enabled: bool
+    api_host: str
+    api_port: int
+    n_ctx: int
+    max_new_tokens: int
+    temperature: float
+    top_p: float
+    repeat_penalty: float
+    repeat_last_n: int
+    reasoning: str
+    reasoning_budget: int
+
+
 class UserModelSettingsIn(BaseModel):
     system_prompt: str | None = None
     global_system_prompt: str | None = None
     max_new_tokens: int | None = Field(None, ge=16, le=4096)
     temperature: float | None = Field(None, ge=0.01, le=2.0)
     top_p: float | None = Field(None, ge=0.05, le=1.0)
+    llama: LlamaServerSettingsIn | None = None
 
 
 class UserModelSettingsOut(BaseModel):
@@ -519,6 +568,7 @@ class UserModelSettingsOut(BaseModel):
     max_new_tokens: int
     temperature: float
     top_p: float
+    llama_server: LlamaServerSettingsOut | None = None
 
 
 class AuthIn(BaseModel):
@@ -576,7 +626,22 @@ def _user_settings_out(uid: int) -> UserModelSettingsOut:
     s = get_user_model_settings(int(uid))
     admin = is_user_admin(int(uid))
     g = get_global_system_prompt() if admin else ""
+    llama_out: LlamaServerSettingsOut | None = None
     if admin:
+        ls = get_llama_server_settings()
+        llama_out = LlamaServerSettingsOut(
+            upstream_enabled=bool(ls["upstream_enabled"]),
+            api_host=str(ls["api_host"]),
+            api_port=int(ls["api_port"]),
+            n_ctx=int(ls["n_ctx"]),
+            max_new_tokens=int(ls["max_new_tokens"]),
+            temperature=float(ls["temperature"]),
+            top_p=float(ls["top_p"]),
+            repeat_penalty=float(ls["repeat_penalty"]),
+            repeat_last_n=int(ls["repeat_last_n"]),
+            reasoning=str(ls["reasoning"]),
+            reasoning_budget=int(ls["reasoning_budget"]),
+        )
         return UserModelSettingsOut(
             is_admin=True,
             system_prompt=s["system_prompt"],
@@ -584,6 +649,7 @@ def _user_settings_out(uid: int) -> UserModelSettingsOut:
             max_new_tokens=s["max_new_tokens"],
             temperature=s["temperature"],
             top_p=s["top_p"],
+            llama_server=llama_out,
         )
     return UserModelSettingsOut(
         is_admin=False,
@@ -592,6 +658,7 @@ def _user_settings_out(uid: int) -> UserModelSettingsOut:
         max_new_tokens=_DEFAULT_MAX_NEW,
         temperature=_DEFAULT_TEMP,
         top_p=_DEFAULT_TOP_P,
+        llama_server=None,
     )
 
 
@@ -619,6 +686,14 @@ def _chat_messages_for_user(user_id: int, base: list[dict]) -> list[dict]:
 
 
 def _infer_params_for_user(user_id: int) -> tuple[int, float, float]:
+    rt = get_runtime()
+    if rt.backend == "llama_server":
+        ls = get_llama_server_settings()
+        return (
+            int(ls["max_new_tokens"]),
+            float(ls["temperature"]),
+            float(ls["top_p"]),
+        )
     if is_user_admin(int(user_id)):
         p = get_user_model_settings(int(user_id))
         return int(p["max_new_tokens"]), float(p["temperature"]), float(p["top_p"])
@@ -736,6 +811,13 @@ async def user_patch_settings(_uid: UserIdDep, body: UserModelSettingsIn):
             temperature=body.temperature,
             top_p=body.top_p,
         )
+        if body.llama is not None:
+            patch = body.llama.model_dump(exclude_unset=True)
+            if patch:
+                try:
+                    set_llama_server_settings(**patch)
+                except ValueError as err:
+                    raise HTTPException(status_code=400, detail=str(err)) from err
     else:
         if body.system_prompt is not None:
             set_user_system_prompt_only(uid, body.system_prompt)

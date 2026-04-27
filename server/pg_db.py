@@ -216,6 +216,7 @@ def init_schema() -> None:
             """
         )
         _ensure_chat_stats_columns(cur)
+        _ensure_app_global_llama_columns(cur)
     finally:
         con.close()
 
@@ -260,3 +261,36 @@ def _ensure_chat_stats_columns(cur: Any) -> None:
         cur.execute(
             "ALTER TABLE chat_messages ADD COLUMN tokens_per_sec DOUBLE PRECISION NULL"
         )
+
+
+def _ensure_app_global_llama_columns(cur: Any) -> None:
+    """Migração idempotente: definições llama-server (admin) em app_global."""
+    cur.execute(
+        """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'app_global'
+        """
+    )
+    have = {r[0] for r in cur.fetchall()}
+    specs: list[tuple[str, str]] = [
+        ("llama_upstream_enabled", "SMALLINT NOT NULL DEFAULT 0"),
+        ("llama_api_host", "TEXT NOT NULL DEFAULT '127.0.0.1'"),
+        ("llama_api_port", "INTEGER NOT NULL DEFAULT 8080"),
+        ("llama_n_ctx", "INTEGER NOT NULL DEFAULT 4096"),
+        ("llama_max_new_tokens", "INTEGER NOT NULL DEFAULT 2048"),
+        ("llama_temperature", "DOUBLE PRECISION NOT NULL DEFAULT 0.8"),
+        ("llama_top_p", "DOUBLE PRECISION NOT NULL DEFAULT 0.9"),
+        ("llama_repeat_penalty", "DOUBLE PRECISION NOT NULL DEFAULT 1.15"),
+        ("llama_repeat_last_n", "INTEGER NOT NULL DEFAULT 512"),
+        ("llama_reasoning", "TEXT NOT NULL DEFAULT 'off'"),
+        ("llama_reasoning_budget", "INTEGER NOT NULL DEFAULT 0"),
+    ]
+    for col, decl in specs:
+        if col not in have:
+            # col/decl são literais controlados (sem input externo).
+            cur.execute(
+                sql.SQL("ALTER TABLE app_global ADD COLUMN ")
+                + sql.Identifier(col)
+                + sql.SQL(" ")
+                + sql.SQL(decl)
+            )

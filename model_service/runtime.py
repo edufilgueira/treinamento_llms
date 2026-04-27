@@ -168,7 +168,7 @@ class ModelRuntime:
         api_key: str | None = None,
         model: str | None = None,
     ) -> None:
-        from .llama_server_upstream import chat_template_kwargs_from_env, fetch_default_model_id
+        from .llama_server_upstream import fetch_default_model_id, resolve_chat_template_kwargs_merged
 
         self.ui_only = False
         self._tokenizer = None
@@ -186,8 +186,8 @@ class ModelRuntime:
         self._model_id = mid
         self._backend = "llama_server"
         self._mode = "llama_server"
-        # Valida kwargs JSON cedo para falhar no arranque se .env estiver mal.
-        chat_template_kwargs_from_env()
+        # Valida ORACULO_LLAMA_CPP_CHAT_TEMPLATE_KWARGS e lê reasoning da base.
+        resolve_chat_template_kwargs_merged()
 
     def upstream_api_key(self) -> str | None:
         return self._upstream_api_key or None
@@ -235,7 +235,11 @@ class ModelRuntime:
             if self._backend == "llama_server":
                 if not self._upstream_base:
                     raise RuntimeError("llama-server não configurado.")
-                from .llama_server_upstream import chat_completions_complete, chat_template_kwargs_from_env
+                from .llama_server_upstream import (
+                    chat_completions_complete,
+                    payload_sampling_extras_from_db,
+                    resolve_chat_template_kwargs_merged,
+                )
 
                 text, usage = chat_completions_complete(
                     self._upstream_base,
@@ -245,7 +249,8 @@ class ModelRuntime:
                     temperature=temperature,
                     top_p=top_p,
                     api_key=self.upstream_api_key(),
-                    chat_template_kwargs=chat_template_kwargs_from_env(),
+                    chat_template_kwargs=resolve_chat_template_kwargs_merged(),
+                    extra_fields=payload_sampling_extras_from_db(),
                 )
                 if usage:
                     with self._last_openai_lock:
@@ -299,7 +304,11 @@ class ModelRuntime:
                     raise RuntimeError("llama-server não configurado.")
                 with self._last_openai_lock:
                     self._last_openai_usage = None
-                from .llama_server_upstream import chat_completions_stream_deltas, chat_template_kwargs_from_env
+                from .llama_server_upstream import (
+                    chat_completions_stream_deltas,
+                    payload_sampling_extras_from_db,
+                    resolve_chat_template_kwargs_merged,
+                )
 
                 yield from chat_completions_stream_deltas(
                     self._upstream_base,
@@ -309,8 +318,9 @@ class ModelRuntime:
                     temperature=temperature,
                     top_p=top_p,
                     api_key=self.upstream_api_key(),
-                    chat_template_kwargs=chat_template_kwargs_from_env(),
+                    chat_template_kwargs=resolve_chat_template_kwargs_merged(),
                     cancel_event=cancel_event,
+                    extra_fields=payload_sampling_extras_from_db(),
                 )
                 return
             if self._backend == "gguf":

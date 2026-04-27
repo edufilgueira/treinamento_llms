@@ -411,6 +411,18 @@
   const settingsMaxTokens = document.getElementById("settings-max-tokens");
   const settingsTemp = document.getElementById("settings-temp");
   const settingsTopP = document.getElementById("settings-top-p");
+  const settingsBlockLlama = document.getElementById("settings-block-llama");
+  const settingsLlamaEnabled = document.getElementById("settings-llama-enabled");
+  const settingsLlamaHost = document.getElementById("settings-llama-host");
+  const settingsLlamaPort = document.getElementById("settings-llama-port");
+  const settingsLlamaNCtx = document.getElementById("settings-llama-n-ctx");
+  const settingsLlamaMaxTokens = document.getElementById("settings-llama-max-tokens");
+  const settingsLlamaTemp = document.getElementById("settings-llama-temp");
+  const settingsLlamaTopP = document.getElementById("settings-llama-top-p");
+  const settingsLlamaRepeatPenalty = document.getElementById("settings-llama-repeat-penalty");
+  const settingsLlamaRepeatLastN = document.getElementById("settings-llama-repeat-last-n");
+  const settingsLlamaReasoning = document.getElementById("settings-llama-reasoning");
+  const settingsLlamaReasoningBudget = document.getElementById("settings-llama-reasoning-budget");
   let currentUserIsAdmin = false;
 
   function isAdminFromApi(v) {
@@ -524,6 +536,9 @@
     if (settingsModelParams) {
       settingsModelParams.hidden = true;
     }
+    if (settingsBlockLlama) {
+      settingsBlockLlama.hidden = true;
+    }
     try {
       const r = await apiFetch("/api/user/settings", { method: "GET" });
       if (r.status === 401) {
@@ -541,13 +556,27 @@
         if (settingsBlockGlobal) {
           settingsBlockGlobal.hidden = !currentUserIsAdmin;
         }
+        let hideAdminModelGrid = false;
+        try {
+          const rs = await apiFetch("/api/status", { method: "GET" });
+          if (rs.ok) {
+            const st = await rs.json();
+            if (st.loaded && st.backend === "llama_server") {
+              hideAdminModelGrid = true;
+            }
+          }
+        } catch (_) {}
         if (settingsModelParams) {
-          settingsModelParams.hidden = !currentUserIsAdmin;
+          settingsModelParams.hidden = !currentUserIsAdmin || hideAdminModelGrid;
+        }
+        if (settingsBlockLlama) {
+          settingsBlockLlama.hidden = !currentUserIsAdmin;
         }
         if (settingsModalHint) {
           if (currentUserIsAdmin) {
-            settingsModalHint.textContent =
-              "Como administrador, edita o system prompt global (todos), o teu prompt pessoal e os parâmetros de inferência.";
+            settingsModalHint.textContent = hideAdminModelGrid
+              ? "Inferência via llama-server: ajusta a secção «Llama HTTP» (tokens, temperatura, penalidades). Reinicia o Oráculo após mudar IP, porta ou «Usar llama-server»."
+              : "Como administrador, edita o prompt global, o teu prompt pessoal, os parâmetros locais (HF/GGUF) e a ligação ao llama-server abaixo.";
           } else {
             settingsModalHint.textContent =
               "Ajusta o teu system prompt; ele junta-se ao prompt global do serviço em cada geração. Os parâmetros do modelo são fixos na conta de utilizador.";
@@ -568,6 +597,44 @@
           }
           if (settingsTopP) {
             settingsTopP.value = String(j.top_p);
+          }
+        }
+        if (currentUserIsAdmin && j.llama_server) {
+          const L = j.llama_server;
+          if (settingsLlamaEnabled) {
+            settingsLlamaEnabled.checked = !!L.upstream_enabled;
+          }
+          if (settingsLlamaHost) {
+            settingsLlamaHost.value = L.api_host != null ? String(L.api_host) : "";
+          }
+          if (settingsLlamaPort) {
+            settingsLlamaPort.value = String(L.api_port != null ? L.api_port : 8080);
+          }
+          if (settingsLlamaNCtx) {
+            settingsLlamaNCtx.value = String(L.n_ctx != null ? L.n_ctx : 4096);
+          }
+          if (settingsLlamaMaxTokens) {
+            settingsLlamaMaxTokens.value = String(L.max_new_tokens != null ? L.max_new_tokens : 2048);
+          }
+          if (settingsLlamaTemp) {
+            settingsLlamaTemp.value = String(L.temperature != null ? L.temperature : 0.8);
+          }
+          if (settingsLlamaTopP) {
+            settingsLlamaTopP.value = String(L.top_p != null ? L.top_p : 0.9);
+          }
+          if (settingsLlamaRepeatPenalty) {
+            settingsLlamaRepeatPenalty.value = String(L.repeat_penalty != null ? L.repeat_penalty : 1.15);
+          }
+          if (settingsLlamaRepeatLastN) {
+            settingsLlamaRepeatLastN.value = String(L.repeat_last_n != null ? L.repeat_last_n : 512);
+          }
+          if (settingsLlamaReasoning) {
+            settingsLlamaReasoning.value = L.reasoning != null ? String(L.reasoning) : "off";
+          }
+          if (settingsLlamaReasoningBudget) {
+            settingsLlamaReasoningBudget.value = String(
+              L.reasoning_budget != null ? L.reasoning_budget : 0
+            );
           }
         }
       }
@@ -639,6 +706,37 @@
       }
       if (isNaN(body.top_p)) {
         body.top_p = 0.9;
+      }
+      const lp = settingsLlamaPort ? parseInt(String(settingsLlamaPort.value), 10) : 8080;
+      const lnCtx = settingsLlamaNCtx ? parseInt(String(settingsLlamaNCtx.value), 10) : 4096;
+      const lMax = settingsLlamaMaxTokens ? parseInt(String(settingsLlamaMaxTokens.value), 10) : 2048;
+      const lRn = settingsLlamaRepeatLastN ? parseInt(String(settingsLlamaRepeatLastN.value), 10) : 512;
+      const lRb = settingsLlamaReasoningBudget
+        ? parseInt(String(settingsLlamaReasoningBudget.value), 10)
+        : 0;
+      body.llama = {
+        upstream_enabled: !!(settingsLlamaEnabled && settingsLlamaEnabled.checked),
+        api_host: settingsLlamaHost ? String(settingsLlamaHost.value).trim() : "127.0.0.1",
+        api_port: isNaN(lp) ? 8080 : lp,
+        n_ctx: isNaN(lnCtx) ? 4096 : lnCtx,
+        max_new_tokens: isNaN(lMax) ? 2048 : lMax,
+        temperature: settingsLlamaTemp ? parseFloat(String(settingsLlamaTemp.value)) : 0.8,
+        top_p: settingsLlamaTopP ? parseFloat(String(settingsLlamaTopP.value)) : 0.9,
+        repeat_penalty: settingsLlamaRepeatPenalty
+          ? parseFloat(String(settingsLlamaRepeatPenalty.value))
+          : 1.15,
+        repeat_last_n: isNaN(lRn) ? 512 : lRn,
+        reasoning: settingsLlamaReasoning ? String(settingsLlamaReasoning.value) : "off",
+        reasoning_budget: isNaN(lRb) ? 0 : lRb,
+      };
+      if (isNaN(body.llama.temperature)) {
+        body.llama.temperature = 0.8;
+      }
+      if (isNaN(body.llama.top_p)) {
+        body.llama.top_p = 0.9;
+      }
+      if (isNaN(body.llama.repeat_penalty)) {
+        body.llama.repeat_penalty = 1.15;
       }
     }
     try {
