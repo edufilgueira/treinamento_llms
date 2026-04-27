@@ -274,6 +274,11 @@ def _inference_backend_from_env() -> str:
     return "hf"
 
 
+def _llama_cpp_upstream_url_from_env() -> str | None:
+    v = (os.environ.get("ORACULO_LLAMA_CPP_BASE_URL") or "").strip().rstrip("/")
+    return v or None
+
+
 def _resolve_gguf_path(cli_path: Path | None) -> Path | None:
     if cli_path is not None:
         p = cli_path.expanduser().resolve()
@@ -339,6 +344,43 @@ async def lifespan(app: FastAPI):
             print(f"Pronto. Servidor em http://{args.host}:{args.port}/", flush=True)
         yield
         rt.ui_only = False
+        return
+
+    upstream = _llama_cpp_upstream_url_from_env()
+    if upstream:
+        rt.ui_only = False
+        api_key = (os.environ.get("ORACULO_LLAMA_CPP_API_KEY") or "").strip() or None
+        model_ov = (os.environ.get("ORACULO_LLAMA_CPP_MODEL") or "").strip() or None
+        try:
+            print(f"Modo llama-server: delegação de inferência para {upstream!r}…", flush=True)
+            rt.load_llama_server(upstream, api_key=api_key, model=model_ov)
+            print(f"  Modelo remoto (id na API): {rt.model_id!r}", flush=True)
+        except Exception as err:
+            print(f"Erro ao ligar ao llama-server: {err}", file=sys.stderr, flush=True)
+            raise
+        if args.host in ("0.0.0.0", "::", "[::]"):
+            print(
+                f"Pronto (llama_server). À escuta em {args.host}:{args.port} — nesta máquina: "
+                f"http://127.0.0.1:{args.port}/ — inferência: {upstream}/v1",
+                flush=True,
+            )
+        else:
+            print(
+                f"Pronto (llama_server). Servidor em http://{args.host}:{args.port}/ — inferência: {upstream}/v1",
+                flush=True,
+            )
+        if _openai_key_configured():
+            print(
+                "API OpenAI-compat deste servidor: POST /v1/chat/completions (Authorization: Bearer <ORACULO_OPENAI_API_KEY>).",
+                flush=True,
+            )
+        else:
+            print(
+                "API OpenAI-compat deste servidor: POST /v1/chat/completions (sem ORACULO_OPENAI_API_KEY — só em rede confiável).",
+                flush=True,
+            )
+        yield
+        rt.clear()
         return
 
     rt.ui_only = False

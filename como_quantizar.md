@@ -1,5 +1,32 @@
 https://github.com/ggerganov/llama.cpp
 
+
+
+# levantar servidor llama.cpp
+
+```bash
+cmake -B build -DLLAMA_BUILD_SERVER=ON
+cmake --build build -j
+```
+
+
+```bash
+# matar serviço
+pgrep -a llama-server
+kill -9 <PID>
+
+#  levantar servidor
+./build/bin/llama-server \
+  -m "$HOME/treinamento_llms/tools/quantized_model/Qwen3-8B-base-F16-Q4_K_M.gguf" \
+  --host 0.0.0.0 \
+  --port 8080 \
+  -c 4096 \
+  --reasoning off \
+  --reasoning-budget 0
+```
+
+
+
 ```bash
 apt install zip -y
 # compactar no servidor
@@ -37,6 +64,7 @@ python ~/treinamento_llms/tools/llama.cpp/convert_hf_to_gguf.py \
   ~/treinamento_llms/trein/outputs/merged_qwen3-8B \
   --outfile ~/treinamento_llms/tools/quantized_model/Qwen3-8B-F16.gguf \
   --outtype f16
+
 
 cd ~/treinamento_llms/tools/llama.cpp/
 

@@ -1,5 +1,5 @@
 """
-Runtime único do modelo: carrega tokenizer + rede (HF) **ou** Llama .gguf e serializa geração.
+Runtime único do modelo: HF (PyTorch), .gguf local (llama-cpp-python) **ou** llama-server HTTP.
 Usado pelo servidor web e pela API /v1/chat/completions.
 """
 
@@ -27,6 +27,8 @@ class ModelRuntime:
         self._backend: str = "hf"
         self._mode: str = ""
         self._model_id: str = ""
+        self._upstream_base: str | None = None
+        self._upstream_api_key: str = ""
         self.ui_only: bool = False
         self._gen_lock = threading.Lock()
         self._active_lock = threading.Lock()
@@ -42,6 +44,8 @@ class ModelRuntime:
     def is_loaded(self) -> bool:
         if self.ui_only:
             return False
+        if self._backend == "llama_server" and self._upstream_base:
+            return True
         if self._backend == "gguf":
             return self._llm is not None
         return self._model is not None
@@ -62,6 +66,10 @@ class ModelRuntime:
     def model_id(self) -> str:
         return self._model_id
 
+    @property
+    def upstream_base(self) -> str | None:
+        return self._upstream_base
+
     def pop_openai_usage(self) -> dict[str, int] | None:
         with self._last_openai_lock:
             u = self._last_openai_usage
@@ -69,6 +77,8 @@ class ModelRuntime:
             return u
 
     def count_output_tokens(self, text: str) -> int:
+        if self._backend == "llama_server":
+            return max(0, len((text or "")) // 4)
         if self._backend == "gguf" and self._llm is not None:
             from .gguf_engine import count_output_tokens_gguf
 
@@ -82,19 +92,24 @@ class ModelRuntime:
             return {"loaded": False, "ui_only": True}
         if not self.is_loaded:
             return {"loaded": False, "ui_only": False}
-        return {
+        out: dict[str, Any] = {
             "loaded": True,
             "ui_only": False,
             "mode": self._mode,
             "backend": self._backend,
             "model_name": self._model_id,
         }
+        if self._backend == "llama_server" and self._upstream_base:
+            out["llama_server_url"] = self._upstream_base
+        return out
 
     def set_ui_only(self) -> None:
         self.ui_only = True
         self._tokenizer = None
         self._model = None
         self._llm = None
+        self._upstream_base = None
+        self._upstream_api_key = ""
         self._backend = "hf"
         self._mode = ""
         self._model_id = ""
@@ -112,6 +127,8 @@ class ModelRuntime:
 
         self.ui_only = False
         self._llm = None
+        self._upstream_base = None
+        self._upstream_api_key = ""
         self._backend = "hf"
         tokenizer, model, merged_used = load_lora_pipeline(
             model_name,
@@ -137,15 +154,50 @@ class ModelRuntime:
         self.ui_only = False
         self._tokenizer = None
         self._model = None
+        self._upstream_base = None
+        self._upstream_api_key = ""
         self._llm = load_llama(gguf_path)
         self._backend = "gguf"
         self._mode = "gguf"
         self._model_id = str(gguf_path.resolve())
 
+    def load_llama_server(
+        self,
+        base_url: str,
+        *,
+        api_key: str | None = None,
+        model: str | None = None,
+    ) -> None:
+        from .llama_server_upstream import chat_template_kwargs_from_env, fetch_default_model_id
+
+        self.ui_only = False
+        self._tokenizer = None
+        self._model = None
+        self._llm = None
+        raw = (base_url or "").strip().rstrip("/")
+        if not raw:
+            raise ValueError("base_url do llama-server vazio.")
+        self._upstream_base = raw
+        self._upstream_api_key = (api_key or "").strip()
+        key = self._upstream_api_key or None
+        mid = (model or "").strip() or None
+        if not mid:
+            mid = fetch_default_model_id(self._upstream_base, key)
+        self._model_id = mid
+        self._backend = "llama_server"
+        self._mode = "llama_server"
+        # Valida kwargs JSON cedo para falhar no arranque se .env estiver mal.
+        chat_template_kwargs_from_env()
+
+    def upstream_api_key(self) -> str | None:
+        return self._upstream_api_key or None
+
     def clear(self) -> None:
         self._tokenizer = None
         self._model = None
         self._llm = None
+        self._upstream_base = None
+        self._upstream_api_key = ""
         self._backend = "hf"
         self._mode = ""
         self._model_id = ""
@@ -180,6 +232,25 @@ class ModelRuntime:
         if not self.is_loaded:
             raise RuntimeError("Modelo não carregado.")
         with self._generation_slot(user_id):
+            if self._backend == "llama_server":
+                if not self._upstream_base:
+                    raise RuntimeError("llama-server não configurado.")
+                from .llama_server_upstream import chat_completions_complete, chat_template_kwargs_from_env
+
+                text, usage = chat_completions_complete(
+                    self._upstream_base,
+                    messages,
+                    model=self._model_id,
+                    max_tokens=max_new_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    api_key=self.upstream_api_key(),
+                    chat_template_kwargs=chat_template_kwargs_from_env(),
+                )
+                if usage:
+                    with self._last_openai_lock:
+                        self._last_openai_usage = usage
+                return text
             if self._backend == "gguf":
                 if self._llm is None:
                     raise RuntimeError("GGUF não carregado.")
@@ -223,6 +294,25 @@ class ModelRuntime:
         if not self.is_loaded:
             raise RuntimeError("Modelo não carregado.")
         with self._generation_slot(user_id):
+            if self._backend == "llama_server":
+                if not self._upstream_base:
+                    raise RuntimeError("llama-server não configurado.")
+                with self._last_openai_lock:
+                    self._last_openai_usage = None
+                from .llama_server_upstream import chat_completions_stream_deltas, chat_template_kwargs_from_env
+
+                yield from chat_completions_stream_deltas(
+                    self._upstream_base,
+                    messages,
+                    model=self._model_id,
+                    max_tokens=max_new_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    api_key=self.upstream_api_key(),
+                    chat_template_kwargs=chat_template_kwargs_from_env(),
+                    cancel_event=cancel_event,
+                )
+                return
             if self._backend == "gguf":
                 if self._llm is None:
                     raise RuntimeError("GGUF não carregado.")

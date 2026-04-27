@@ -105,6 +105,16 @@ def _echo_model_id(req_model: str, loaded_id: str) -> str:
 async def list_models(authorization: Annotated[str | None, Header()] = None) -> dict[str, Any]:
     _verify_bearer(authorization)
     rt = get_runtime()
+    if rt.backend == "llama_server" and rt.upstream_base:
+        from .llama_server_upstream import proxy_list_models
+
+        try:
+            return proxy_list_models(rt.upstream_base, rt.upstream_api_key())
+        except Exception as err:  # noqa: BLE001
+            raise HTTPException(
+                status_code=502,
+                detail=f"llama-server /v1/models falhou: {err}",
+            ) from err
     if not rt.is_loaded:
         return {"object": "list", "data": []}
     mid = rt.model_id or "local"
@@ -144,7 +154,7 @@ async def chat_completions(
     if tok is not None and rt.backend == "hf":
         prompt_toks = _prompt_token_count(tok, messages)
     else:
-        prompt_toks = 0
+        prompt_toks = 0  # gguf / llama_server: usage vem da resposta quando disponível
 
     if body.stream:
 
