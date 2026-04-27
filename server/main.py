@@ -11,8 +11,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 import psycopg2
 
-from data_config import DEFAULT_GGUF_PATH, DEFAULT_MERGED_MODEL_DIR, apply_loading_progress_env
-
 from server.api.v1 import openai_router
 from server.api.web import web_router
 from server.db.auth_db import init_db, llama_upstream_base_url_from_db
@@ -24,7 +22,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 _SERVER_ROOT = Path(__file__).resolve().parent
-_PROJECT_ROOT = _SERVER_ROOT.parent
 
 _startup_args: argparse.Namespace | None = None
 
@@ -62,26 +59,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--host", default=_bind_default)
     p.add_argument("--port", type=int, default=8765)
     p.add_argument(
-        "--merged_model_dir",
-        type=Path,
-        default=None,
-        help="Pasta do modelo fundido (merge_lora). Padrão: ORACULO_MERGED_MODEL_DIR ou trein/outputs/merged_model.",
-    )
-    p.add_argument(
-        "--inference-backend",
-        type=str,
-        default=None,
-        choices=["hf", "gguf"],
-        help="hf = PyTorch modelo fundido; gguf = ficheiro local. ORACULO_INFERENCE_BACKEND.",
-    )
-    p.add_argument(
-        "--gguf-path",
-        type=Path,
-        default=None,
-        help="Caminho ao .gguf. Senão: ORACULO_GGUF_PATH ou tools/quantized_model/…",
-    )
-    p.add_argument("--trust_remote_code", action="store_true")
-    p.add_argument(
         "--ui-only",
         action="store_true",
         help="Só auth e estáticos (ORACULO_UI_ONLY=1).",
@@ -90,54 +67,12 @@ def parse_args() -> argparse.Namespace:
     v = os.environ.get("ORACULO_UI_ONLY", "").strip().lower()
     if v in ("1", "true", "yes", "on"):
         args.ui_only = True
-    if args.merged_model_dir is not None:
-        args.merged_model_dir = Path(args.merged_model_dir).expanduser().resolve()
-    if args.gguf_path is not None:
-        args.gguf_path = Path(args.gguf_path).expanduser().resolve()
-    ib = args.inference_backend
-    if ib is None:
-        ib = _inference_backend_from_env()
-    args.inference_backend = ib
     return args
-
-
-def _resolve_merged_path(cli_path: Path | None) -> Path | None:
-    if cli_path is not None:
-        return cli_path
-    env_m = (os.environ.get("ORACULO_MERGED_MODEL_DIR") or "").strip()
-    if env_m:
-        p = Path(env_m).expanduser().resolve()
-        if p.is_dir() and (p / "config.json").is_file():
-            return p
-    if DEFAULT_MERGED_MODEL_DIR.is_dir() and (DEFAULT_MERGED_MODEL_DIR / "config.json").is_file():
-        return DEFAULT_MERGED_MODEL_DIR
-    return None
-
-
-def _inference_backend_from_env() -> str:
-    v = (os.environ.get("ORACULO_INFERENCE_BACKEND") or "hf").strip().lower()
-    if v in ("gguf", "hf"):
-        return v
-    return "hf"
 
 
 def _llama_cpp_upstream_url_from_env() -> str | None:
     v = (os.environ.get("ORACULO_LLAMA_CPP_BASE_URL") or "").strip().rstrip("/")
     return v or None
-
-
-def _resolve_gguf_path(cli_path: Path | None) -> Path | None:
-    if cli_path is not None:
-        p = cli_path.expanduser().resolve()
-        return p if p.is_file() else None
-    env_p = (os.environ.get("ORACULO_GGUF_PATH") or "").strip()
-    if env_p:
-        p = Path(env_p).expanduser().resolve()
-        if p.is_file():
-            return p
-    if DEFAULT_GGUF_PATH.is_file():
-        return DEFAULT_GGUF_PATH
-    return None
 
 
 def _openai_key_configured() -> bool:
@@ -169,6 +104,15 @@ def _print_pg_ligação_falhou(err: BaseException) -> None:
     )
 
 
+def _missing_llama_server_msg() -> str:
+    return (
+        "Inferência: o Oráculo não carrega GGUF nem PyTorch — só delega ao llama-server.\n"
+        "  Defina ORACULO_LLAMA_CPP_BASE_URL no .env (ex.: http://127.0.0.1:8080), ou\n"
+        "  no admin (PostgreSQL) ative «Usar llama-server» e preencha o URL base.\n"
+        "  Modo só UI:  ./serve.sh -- --ui-only"
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     rt = get_runtime()
@@ -196,79 +140,37 @@ async def lifespan(app: FastAPI):
 
     db_upstream = llama_upstream_base_url_from_db()
     upstream = db_upstream or _llama_cpp_upstream_url_from_env()
-    if upstream:
-        rt.ui_only = False
-        api_key = (os.environ.get("ORACULO_LLAMA_CPP_API_KEY") or "").strip() or None
-        model_ov = (os.environ.get("ORACULO_LLAMA_CPP_MODEL") or "").strip() or None
-        try:
-            src = "base de dados (admin)" if db_upstream else ".env ORACULO_LLAMA_CPP_BASE_URL"
-            print(
-                f"Modo llama-server ({src}): delegação de inferência para {upstream!r}…",
-                flush=True,
-            )
-            rt.load_llama_server(upstream, api_key=api_key, model=model_ov)
-            print(f"  Modelo remoto (id na API): {rt.model_id!r}", flush=True)
-        except Exception as err:
-            print(f"Erro ao ligar ao llama-server: {err}", file=sys.stderr, flush=True)
-            raise
-        if args.host in ("0.0.0.0", "::", "[::]"):
-            print(
-                f"Pronto (llama_server). À escuta em {args.host}:{args.port} — nesta máquina: "
-                f"http://127.0.0.1:{args.port}/ — inferência: {upstream}/v1",
-                flush=True,
-            )
-        else:
-            print(
-                f"Pronto (llama_server). Servidor em http://{args.host}:{args.port}/ — inferência: {upstream}/v1",
-                flush=True,
-            )
-        if _openai_key_configured():
-            print(
-                "API OpenAI-compat: POST /v1/chat/completions (Authorization: Bearer <ORACULO_OPENAI_API_KEY>).",
-                flush=True,
-            )
-        else:
-            print(
-                "API OpenAI-compat: POST /v1/chat/completions (sem ORACULO_OPENAI_API_KEY — só em rede confiável).",
-                flush=True,
-            )
-        yield
-        rt.clear()
-        return
+    if not upstream:
+        print(_missing_llama_server_msg(), file=sys.stderr, flush=True)
+        raise RuntimeError(
+            "Sem URL do llama-server: ORACULO_LLAMA_CPP_BASE_URL ou configuração no admin."
+        )
 
     rt.ui_only = False
+    api_key = (os.environ.get("ORACULO_LLAMA_CPP_API_KEY") or "").strip() or None
+    model_ov = (os.environ.get("ORACULO_LLAMA_CPP_MODEL") or "").strip() or None
     try:
-        if args.inference_backend == "gguf":
-            gguf = _resolve_gguf_path(args.gguf_path)
-            if not gguf:
-                raise FileNotFoundError(
-                    "Modo gguf: ficheiro .gguf não encontrado. Use --gguf-path, "
-                    f"ou ORACULO_GGUF_PATH, ou coloque o ficheiro em {DEFAULT_GGUF_PATH}."
-                )
-            print(f"A carregar modelo GGUF (só uma vez; pode demorar)…\n  {gguf}", flush=True)
-            rt.load_gguf(gguf)
-        else:
-            merged = _resolve_merged_path(args.merged_model_dir)
-            if not merged:
-                raise FileNotFoundError(
-                    "Modo HF: pasta do modelo **fundido** não encontrada. "
-                    "Corre merge_lora.py, define ORACULO_MERGED_MODEL_DIR ou --merged_model_dir, "
-                    f"ou coloca o merge em {DEFAULT_MERGED_MODEL_DIR}."
-                )
-            print(f"A carregar modelo fundido (PyTorch)…\n  {merged}", flush=True)
-            rt.load_hf_merged(merged, trust_remote_code=args.trust_remote_code)
+        src = "base de dados (admin)" if db_upstream else ".env ORACULO_LLAMA_CPP_BASE_URL"
+        print(
+            f"Modo llama-server ({src}): delegação de inferência para {upstream!r}…",
+            flush=True,
+        )
+        rt.load_llama_server(upstream, api_key=api_key, model=model_ov)
+        print(f"  Modelo remoto (id na API): {rt.model_id!r}", flush=True)
     except Exception as err:
-        print(f"Erro ao carregar: {err}", file=sys.stderr, flush=True)
+        print(f"Erro ao ligar ao llama-server: {err}", file=sys.stderr, flush=True)
         raise
-    mode = rt.mode
     if args.host in ("0.0.0.0", "::", "[::]"):
         print(
-            f"Pronto ({mode}). À escuta em {args.host}:{args.port} — nesta máquina: "
-            f"http://127.0.0.1:{args.port}/ — noutro PC/rede: http://<IP>:{args.port}/",
+            f"Pronto (llama_server). À escuta em {args.host}:{args.port} — nesta máquina: "
+            f"http://127.0.0.1:{args.port}/ — inferência: {upstream}/v1",
             flush=True,
         )
     else:
-        print(f"Pronto ({mode}). Servidor em http://{args.host}:{args.port}/", flush=True)
+        print(
+            f"Pronto (llama_server). Servidor em http://{args.host}:{args.port}/ — inferência: {upstream}/v1",
+            flush=True,
+        )
     if _openai_key_configured():
         print(
             "API OpenAI-compat: POST /v1/chat/completions (Authorization: Bearer <ORACULO_OPENAI_API_KEY>).",
@@ -276,7 +178,7 @@ async def lifespan(app: FastAPI):
         )
     else:
         print(
-            "API OpenAI-compat: POST /v1/chat/completions (sem ORACULO_OPENAI_API_KEY — só use em rede confiável).",
+            "API OpenAI-compat: POST /v1/chat/completions (sem ORACULO_OPENAI_API_KEY — só em rede confiável).",
             flush=True,
         )
     yield

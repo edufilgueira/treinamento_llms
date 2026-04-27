@@ -1,4 +1,4 @@
-"""Inferência: runtime, llama-server upstream, HF fundido, GGUF."""
+"""Inferência: runtime e cliente llama-server (llama.cpp)."""
 
 from .runtime import ModelRuntime, get_runtime
 

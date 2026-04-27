@@ -1,12 +1,5 @@
-# Oráculo: API (FastAPI), PostgreSQL, UI, inferência HF (modelo fundido), httpx (llama-server).
-# Não inclui trl/datasets/peft para treino — só o treino usa. Instale com: pip install -r server/requirements.txt
-
-torch>=2.1.0
-transformers>=4.40.0
-accelerate>=0.28.0
-sentencepiece>=0.2.0
-tiktoken>=0.7.0
-protobuf>=4.25.0
+# Oráculo: API (FastAPI), PostgreSQL, UI, httpx (llama-server). Sem PyTorch/transformers no servidor.
+# Instale com: pip install -r server/requirements.txt
 
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0

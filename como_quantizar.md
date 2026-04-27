@@ -496,9 +496,8 @@ Se for:
 ---
 
 ```bash
+# Oráculo: sem PyTorch no servidor — levanta llama-server com o .gguf, depois o Oráculo só faz proxy.
 pip install -r server/requirements.txt
-pip install -r server/requirements-gguf.txt
-export ORACULO_INFERENCE_BACKEND=gguf
-export ORACULO_GGUF_PATH="$HOME/treinamento_llms/tools/quantized_model/Merged_Model-3.1B-Q4_K_M.gguf"
+export ORACULO_LLAMA_CPP_BASE_URL=http://127.0.0.1:8080
 cd ~/treinamento_llms && python3 server/serve_lora.py
 ```

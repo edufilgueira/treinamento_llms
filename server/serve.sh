@@ -14,12 +14,10 @@ fi
 # Ativa o venv
 source .venv/bin/activate
 
-# Instala dependências do servidor se faltar qualquer pacote crítico (API + modelo + DB)
-if ! python3 -c "import torch, transformers, accelerate, fastapi, uvicorn, bcrypt, psycopg2, dotenv, sentencepiece, tiktoken, httpx" 2>/dev/null; then
+# Instala dependências do servidor se faltar qualquer pacote crítico
+if ! python3 -c "import fastapi, uvicorn, bcrypt, psycopg2, dotenv, httpx" 2>/dev/null; then
     echo "Instalando dependências do servidor..."
     pip install -r server/requirements.txt
 fi
 
-# SERVIDOR QUANTIZADO
-# exec python3 "$SCRIPT_DIR/serve_lora.py" --inference-backend gguf --gguf-path "$SCRIPT_DIR/../tools/quantized_model/Merged_Model-3.1B-Q5_K_M.gguf" "$@"
-exec python3 "$SCRIPT_DIR/serve_lora.py" --inference-backend gguf --gguf-path "$SCRIPT_DIR/../tools/quantized_model/Qwen3-8B-F16-Q4_K_M.gguf" "$@"
+exec python3 "$SCRIPT_DIR/serve_lora.py" "$@"

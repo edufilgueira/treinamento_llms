@@ -1,12 +1,11 @@
 """
-Runtime único: Hugging Face (modelo fundido), .gguf local ou llama-server HTTP.
+Runtime único: delegação ao llama-server (llama.cpp) via HTTP.
 """
 
 from __future__ import annotations
 
 import threading
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Any, Iterator
 
 _runtime_singleton: "ModelRuntime | None" = None
@@ -14,10 +13,7 @@ _runtime_singleton: "ModelRuntime | None" = None
 
 class ModelRuntime:
     def __init__(self) -> None:
-        self._tokenizer: Any = None
-        self._model: Any = None
-        self._llm: Any = None
-        self._backend: str = "hf"
+        self._backend: str = ""
         self._mode: str = ""
         self._model_id: str = ""
         self._upstream_base: str | None = None
@@ -37,19 +33,15 @@ class ModelRuntime:
     def is_loaded(self) -> bool:
         if self.ui_only:
             return False
-        if self._backend == "llama_server" and self._upstream_base:
-            return True
-        if self._backend == "gguf":
-            return self._llm is not None
-        return self._model is not None
+        return self._backend == "llama_server" and bool(self._upstream_base)
 
     @property
     def tokenizer(self) -> Any:
-        return self._tokenizer
+        return None
 
     @property
     def model(self) -> Any:
-        return self._model
+        return None
 
     @property
     def mode(self) -> str:
@@ -70,15 +62,7 @@ class ModelRuntime:
             return u
 
     def count_output_tokens(self, text: str) -> int:
-        if self._backend == "llama_server":
-            return max(0, len((text or "")) // 4)
-        if self._backend == "gguf" and self._llm is not None:
-            from .gguf_engine import count_output_tokens_gguf
-
-            return count_output_tokens_gguf(self._llm, text)
-        if self._tokenizer is None:
-            return max(0, len((text or "")) // 4)
-        return len(self._tokenizer.encode(str(text or ""), add_special_tokens=False))
+        return max(0, len((text or "")) // 4)
 
     def status_public(self) -> dict[str, Any]:
         if self.ui_only:
@@ -92,56 +76,17 @@ class ModelRuntime:
             "backend": self._backend,
             "model_name": self._model_id,
         }
-        if self._backend == "llama_server" and self._upstream_base:
+        if self._upstream_base:
             out["llama_server_url"] = self._upstream_base
         return out
 
     def set_ui_only(self) -> None:
         self.ui_only = True
-        self._tokenizer = None
-        self._model = None
-        self._llm = None
         self._upstream_base = None
         self._upstream_api_key = ""
-        self._backend = "hf"
+        self._backend = ""
         self._mode = ""
         self._model_id = ""
-
-    def load_hf_merged(
-        self,
-        merged_model_dir: Path,
-        *,
-        trust_remote_code: bool = False,
-    ) -> None:
-        from .hf_engine import load_merged_pipeline
-
-        self.ui_only = False
-        self._llm = None
-        self._upstream_base = None
-        self._upstream_api_key = ""
-        self._backend = "hf"
-        tokenizer, model = load_merged_pipeline(
-            merged_model_dir,
-            trust_remote_code=trust_remote_code,
-            fix_generation_max_length=True,
-        )
-        self._tokenizer = tokenizer
-        self._model = model
-        self._mode = "fundido"
-        self._model_id = str(merged_model_dir.resolve())
-
-    def load_gguf(self, gguf_path: Path) -> None:
-        from .gguf_engine import load_llama
-
-        self.ui_only = False
-        self._tokenizer = None
-        self._model = None
-        self._upstream_base = None
-        self._upstream_api_key = ""
-        self._llm = load_llama(gguf_path)
-        self._backend = "gguf"
-        self._mode = "gguf"
-        self._model_id = str(gguf_path.resolve())
 
     def load_llama_server(
         self,
@@ -153,9 +98,6 @@ class ModelRuntime:
         from .llama_server_upstream import fetch_default_model_id, resolve_chat_template_kwargs_merged
 
         self.ui_only = False
-        self._tokenizer = None
-        self._model = None
-        self._llm = None
         raw = (base_url or "").strip().rstrip("/")
         if not raw:
             raise ValueError("base_url do llama-server vazio.")
@@ -174,12 +116,9 @@ class ModelRuntime:
         return self._upstream_api_key or None
 
     def clear(self) -> None:
-        self._tokenizer = None
-        self._model = None
-        self._llm = None
         self._upstream_base = None
         self._upstream_api_key = ""
-        self._backend = "hf"
+        self._backend = ""
         self._mode = ""
         self._model_id = ""
         with self._last_openai_lock:
@@ -213,59 +152,29 @@ class ModelRuntime:
         if not self.is_loaded:
             raise RuntimeError("Modelo não carregado.")
         with self._generation_slot(user_id):
-            if self._backend == "llama_server":
-                if not self._upstream_base:
-                    raise RuntimeError("llama-server não configurado.")
-                from .llama_server_upstream import (
-                    chat_completions_complete,
-                    payload_sampling_extras_from_db,
-                    resolve_chat_template_kwargs_merged,
-                )
+            if not self._upstream_base:
+                raise RuntimeError("llama-server não configurado.")
+            from .llama_server_upstream import (
+                chat_completions_complete,
+                payload_sampling_extras_from_db,
+                resolve_chat_template_kwargs_merged,
+            )
 
-                text, usage = chat_completions_complete(
-                    self._upstream_base,
-                    messages,
-                    model=self._model_id,
-                    max_tokens=max_new_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    api_key=self.upstream_api_key(),
-                    chat_template_kwargs=resolve_chat_template_kwargs_merged(),
-                    extra_fields=payload_sampling_extras_from_db(),
-                )
-                if usage:
-                    with self._last_openai_lock:
-                        self._last_openai_usage = usage
-                return text
-            if self._backend == "gguf":
-                if self._llm is None:
-                    raise RuntimeError("GGUF não carregado.")
-                from .gguf_engine import generate_chat_reply_gguf
-
-                text, usage = generate_chat_reply_gguf(
-                    self._llm,
-                    messages,
-                    max_new_tokens=max_new_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                )
-                if usage:
-                    with self._last_openai_lock:
-                        self._last_openai_usage = usage
-                return text
-
-            from .hf_engine import generate_chat_reply
-
-            if self._tokenizer is None or self._model is None:
-                raise RuntimeError("Modelo não carregado.")
-            return generate_chat_reply(
-                self._tokenizer,
-                self._model,
+            text, usage = chat_completions_complete(
+                self._upstream_base,
                 messages,
-                max_new_tokens=max_new_tokens,
+                model=self._model_id,
+                max_tokens=max_new_tokens,
                 temperature=temperature,
                 top_p=top_p,
+                api_key=self.upstream_api_key(),
+                chat_template_kwargs=resolve_chat_template_kwargs_merged(),
+                extra_fields=payload_sampling_extras_from_db(),
             )
+            if usage:
+                with self._last_openai_lock:
+                    self._last_openai_usage = usage
+            return text
 
     def stream(
         self,
@@ -280,59 +189,27 @@ class ModelRuntime:
         if not self.is_loaded:
             raise RuntimeError("Modelo não carregado.")
         with self._generation_slot(user_id):
-            if self._backend == "llama_server":
-                if not self._upstream_base:
-                    raise RuntimeError("llama-server não configurado.")
-                with self._last_openai_lock:
-                    self._last_openai_usage = None
-                from .llama_server_upstream import (
-                    chat_completions_stream_deltas,
-                    payload_sampling_extras_from_db,
-                    resolve_chat_template_kwargs_merged,
-                )
+            if not self._upstream_base:
+                raise RuntimeError("llama-server não configurado.")
+            with self._last_openai_lock:
+                self._last_openai_usage = None
+            from .llama_server_upstream import (
+                chat_completions_stream_deltas,
+                payload_sampling_extras_from_db,
+                resolve_chat_template_kwargs_merged,
+            )
 
-                yield from chat_completions_stream_deltas(
-                    self._upstream_base,
-                    messages,
-                    model=self._model_id,
-                    max_tokens=max_new_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    api_key=self.upstream_api_key(),
-                    chat_template_kwargs=resolve_chat_template_kwargs_merged(),
-                    cancel_event=cancel_event,
-                    extra_fields=payload_sampling_extras_from_db(),
-                )
-                return
-            if self._backend == "gguf":
-                if self._llm is None:
-                    raise RuntimeError("GGUF não carregado.")
-                with self._last_openai_lock:
-                    self._last_openai_usage = None
-                from .gguf_engine import generate_chat_reply_stream_gguf
-
-                yield from generate_chat_reply_stream_gguf(
-                    self._llm,
-                    messages,
-                    max_new_tokens=max_new_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    cancel_event=cancel_event,
-                )
-                return
-
-            from .hf_engine import generate_chat_reply_stream
-
-            if self._tokenizer is None or self._model is None:
-                raise RuntimeError("Modelo não carregado.")
-            yield from generate_chat_reply_stream(
-                self._tokenizer,
-                self._model,
+            yield from chat_completions_stream_deltas(
+                self._upstream_base,
                 messages,
-                max_new_tokens=max_new_tokens,
+                model=self._model_id,
+                max_tokens=max_new_tokens,
                 temperature=temperature,
                 top_p=top_p,
+                api_key=self.upstream_api_key(),
+                chat_template_kwargs=resolve_chat_template_kwargs_merged(),
                 cancel_event=cancel_event,
+                extra_fields=payload_sampling_extras_from_db(),
             )
 
 

@@ -1,6 +1,8 @@
-# Interruptor: inferência **HF (PyTorch)** vs **GGUF (llama-cpp-python)**
+# Interruptor: inferência **HF (PyTorch)** vs **GGUF (llama-cpp-python)** — *histórico*
 
-O mesmo servidor (`server/serve_lora.py`) pode arrancar de duas formas:
+> **Actual:** o `serve_lora.py` **já não** carrega HF nem GGUF no Python; só delega ao **llama-server** (llama.cpp). O texto abaixo descreve um modo antigo; para arranque actual vê [README.md](README.md).
+
+O mesmo servidor (`server/serve_lora.py`) **antes** podia arrancar de duas formas:
 
 | Modo     | O que carrega | Dependências |
 |----------|---------------|--------------|

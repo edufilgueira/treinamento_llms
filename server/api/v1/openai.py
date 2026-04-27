@@ -18,7 +18,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from server.inference.hf_engine import apply_chat_template
+from server.inference.llama_server_upstream import proxy_list_models
 from server.inference.runtime import get_runtime
 
 router = APIRouter(prefix="/v1", tags=["openai"])
@@ -75,25 +75,6 @@ def _messages_to_dicts(body: OAIChatCompletionRequest) -> list[dict[str, str]]:
     return out
 
 
-def _prompt_token_count(tokenizer: Any, messages: list[dict[str, str]]) -> int:
-    ids = apply_chat_template(
-        tokenizer,
-        messages,
-        tokenize=True,
-        add_generation_prompt=True,
-    )
-    if isinstance(ids, list):
-        return len(ids)
-    if isinstance(ids, dict):
-        t = ids.get("input_ids")
-        if t is not None and hasattr(t, "shape"):
-            return int(t.shape[-1])
-        return 0
-    if hasattr(ids, "shape"):
-        return int(ids.shape[-1])
-    return 0
-
-
 def _echo_model_id(req_model: str, loaded_id: str) -> str:
     if req_model and req_model != "default":
         return req_model
@@ -105,8 +86,6 @@ async def list_models(authorization: Annotated[str | None, Header()] = None) -> 
     _verify_bearer(authorization)
     rt = get_runtime()
     if rt.backend == "llama_server" and rt.upstream_base:
-        from .llama_server_upstream import proxy_list_models
-
         try:
             return proxy_list_models(rt.upstream_base, rt.upstream_api_key())
         except Exception as err:  # noqa: BLE001
@@ -145,15 +124,11 @@ async def chat_completions(
             detail="Model not loaded (ui-only mode or load error).",
         )
     messages = _messages_to_dicts(body)
-    tok = rt.tokenizer
     max_new = int(body.max_tokens or 2048)
     temp = float(body.temperature if body.temperature is not None else 0.7)
     top_p = float(body.top_p if body.top_p is not None else 0.9)
     resp_model = _echo_model_id(body.model, rt.model_id)
-    if tok is not None and rt.backend == "hf":
-        prompt_toks = _prompt_token_count(tok, messages)
-    else:
-        prompt_toks = 0  # gguf / llama_server: usage vem da resposta quando disponível
+    prompt_toks = 0  # preenchido por usage do llama-server quando existir
 
     if body.stream:
 

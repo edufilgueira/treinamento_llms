@@ -2,8 +2,8 @@
 Configuração compartilhada: dados (snapshots) e defaults do modelo / pastas de saída.
 
 **Modelo e pastas** — `DEFAULT_MODEL_NAME`, `DEFAULT_ADAPTER_DIR` e `DEFAULT_MERGED_MODEL_DIR`
-são usados por `train_lora.py`, `inferir.py`, `merge_lora.py` e `server/serve_lora.py`. Altere **uma vez** aqui para
-manter treino, inferência e merge alinhados. Opcional: `DEFAULT_GGUF_PATH` (ficheiro .gguf, modo `ORACULO_INFERENCE_BACKEND=gguf`).
+são usados por `train_lora.py`, `inferir.py` e `merge_lora.py`. Altere **uma vez** aqui para
+manter treino, inferência e merge alinhados. Opcional: `DEFAULT_GGUF_PATH` (referência local ao `.gguf` para quantização / llama-server).
 
 **Progresso em `inferir.py`** — duas coisas **distintas**:
 - `SHOW_LOADING_PROGRESS` — **só** barras do tqdm (pesos) e do download no Hugging Face Hub (`True` = mostrar, `False` = ocultar).
