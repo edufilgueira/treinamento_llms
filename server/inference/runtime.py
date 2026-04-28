@@ -154,17 +154,30 @@ class ModelRuntime:
         with self._generation_slot(user_id):
             if not self._upstream_base:
                 raise RuntimeError("llama-server não configurado.")
+            from server.db.auth_db import get_llama_server_settings
+            from server.services.llama_context import (
+                cap_max_new_tokens_for_n_ctx,
+                prepare_messages_for_llama_upstream,
+            )
+
             from .llama_server_upstream import (
                 chat_completions_complete,
                 payload_sampling_extras_from_db,
                 resolve_chat_template_kwargs_merged,
             )
 
+            ls = get_llama_server_settings()
+            mnt_eff = cap_max_new_tokens_for_n_ctx(
+                int(ls["n_ctx"]), int(max_new_tokens)
+            )
+            messages = prepare_messages_for_llama_upstream(
+                messages, max_new_tokens=mnt_eff
+            )
             text, usage = chat_completions_complete(
                 self._upstream_base,
                 messages,
                 model=self._model_id,
-                max_tokens=max_new_tokens,
+                max_tokens=mnt_eff,
                 temperature=temperature,
                 top_p=top_p,
                 api_key=self.upstream_api_key(),
@@ -193,17 +206,30 @@ class ModelRuntime:
                 raise RuntimeError("llama-server não configurado.")
             with self._last_openai_lock:
                 self._last_openai_usage = None
+            from server.db.auth_db import get_llama_server_settings
+            from server.services.llama_context import (
+                cap_max_new_tokens_for_n_ctx,
+                prepare_messages_for_llama_upstream,
+            )
+
             from .llama_server_upstream import (
                 chat_completions_stream_deltas,
                 payload_sampling_extras_from_db,
                 resolve_chat_template_kwargs_merged,
             )
 
+            ls = get_llama_server_settings()
+            mnt_eff = cap_max_new_tokens_for_n_ctx(
+                int(ls["n_ctx"]), int(max_new_tokens)
+            )
+            messages = prepare_messages_for_llama_upstream(
+                messages, max_new_tokens=mnt_eff
+            )
             yield from chat_completions_stream_deltas(
                 self._upstream_base,
                 messages,
                 model=self._model_id,
-                max_tokens=max_new_tokens,
+                max_tokens=mnt_eff,
                 temperature=temperature,
                 top_p=top_p,
                 api_key=self.upstream_api_key(),

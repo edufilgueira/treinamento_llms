@@ -259,13 +259,14 @@
         <hr class="modal__hr" />
         <h3 class="modal__subh">Parâmetros de geração e llama-server</h3>
         <p class="modal__hint modal__hint--small" id="settings-llama-hint">
-          Tokens, temperatura e amostragem aplicam-se à inferência (inclui HF/GGUF no Python para o administrador).
-          «Usar llama-server» delega a geração ao binário; o contexto (<code>-c</code>) deve coincidir com o arranque do llama-server.
-          Após alterar IP, porta ou essa opção, reinicia o processo Oráculo.
+          Estes valores aplicam-se a todos os pedidos para o llama-server. O <strong>n_ctx</strong> aqui define o
+          orçamento com que o Oráculo <strong>trunca o histórico</strong> antes de enviar (heurística ~4 chars/token).
+          O binário deve arrancar com <code>-c</code> <strong>≥</strong> a este n_ctx (senão o llama-server pode devolver 400).
+          Após alterar IP, porta ou «Usar llama-server», reinicia o processo Oráculo.
         </p>
         <label class="modal__check">
           <input type="checkbox" id="settings-llama-enabled" />
-          <span>Usar llama-server (inferência via HTTP em vez de GGUF/HF neste processo)</span>
+          <span>Usar llama-server (URL de inferência a partir do host/porta abaixo)</span>
         </label>
         <div class="modal__grid-2">
           <div>
@@ -279,11 +280,13 @@
         </div>
         <div class="modal__grid-2">
           <div>
-            <label class="modal__label" for="settings-llama-n-ctx">Contexto n_ctx (referência)</label>
+            <label class="modal__label" for="settings-llama-n-ctx">Contexto n_ctx (truncagem + reserva p/ resposta)</label>
             <input type="number" id="settings-llama-n-ctx" class="modal__input" min="256" max="1000000" step="1" />
           </div>
           <div>
-            <label class="modal__label" for="settings-llama-max-tokens">Máx. tokens novos</label>
+            <label class="modal__label" for="settings-llama-max-tokens"
+              >Máx. tokens novos (&lt; n_ctx)</label
+            >
             <input type="number" id="settings-llama-max-tokens" class="modal__input" min="16" max="32768" step="1" />
           </div>
         </div>

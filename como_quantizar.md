@@ -20,7 +20,7 @@ kill -9 <PID>
   -m "$HOME/treinamento_llms/tools/quantized_model/Qwen3-8B-base-F16-Q4_K_M.gguf" \
   --host 0.0.0.0 \
   --port 8080 \
-  -c 4096 \
+  -c 8192 \
   --reasoning off \
   --reasoning-budget 0
 ```

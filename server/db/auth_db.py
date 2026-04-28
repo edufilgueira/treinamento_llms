@@ -434,6 +434,15 @@ def set_llama_server_settings(
     mnt = int(max_new_tokens) if max_new_tokens is not None else int(cur_settings["max_new_tokens"])
     if mnt < 16 or mnt > 32768:
         raise ValueError("Máx. tokens novos: entre 16 e 32768.")
+    from server.services.llama_context import max_allowed_max_new_tokens_for_n_ctx
+
+    cap_mnt = max_allowed_max_new_tokens_for_n_ctx(nc)
+    if mnt > cap_mnt:
+        raise ValueError(
+            "Máx. tokens novos tem de ser menor que n_ctx (tem de sobrar janela para o prompt). "
+            f"Máximo: {cap_mnt}. Aumenta n_ctx ou reduz máx. tokens novos. "
+            f"(n_ctx={nc}, pedido={mnt})"
+        )
     temp = float(temperature) if temperature is not None else float(cur_settings["temperature"])
     if temp < 0.01 or temp > 2.0:
         raise ValueError("Temperature: entre 0.01 e 2.0.")

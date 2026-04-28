@@ -18,8 +18,10 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from server.db.auth_db import get_llama_server_settings
 from server.inference.llama_server_upstream import proxy_list_models
 from server.inference.runtime import get_runtime
+from server.services.llama_context import cap_max_new_tokens_for_n_ctx
 
 router = APIRouter(prefix="/v1", tags=["openai"])
 
@@ -57,7 +59,7 @@ class OAIChatCompletionRequest(BaseModel):
 
     model: str = Field(default="default", max_length=256)
     messages: list[OAIChatMessage] = Field(..., min_length=1)
-    max_tokens: int | None = Field(default=2048, ge=1, le=4096)
+    max_tokens: int | None = Field(default=2048, ge=1, le=32768)
     temperature: float | None = Field(default=0.7, ge=0.0, le=2.0)
     top_p: float | None = Field(default=0.9, ge=0.0, le=1.0)
     stream: bool = False
@@ -125,6 +127,10 @@ async def chat_completions(
         )
     messages = _messages_to_dicts(body)
     max_new = int(body.max_tokens or 2048)
+    if rt.backend == "llama_server":
+        ls = get_llama_server_settings()
+        max_new = min(max_new, int(ls["max_new_tokens"]))
+        max_new = cap_max_new_tokens_for_n_ctx(int(ls["n_ctx"]), max_new)
     temp = float(body.temperature if body.temperature is not None else 0.7)
     top_p = float(body.top_p if body.top_p is not None else 0.9)
     resp_model = _echo_model_id(body.model, rt.model_id)

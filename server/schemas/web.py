@@ -12,14 +12,14 @@ class Message(BaseModel):
 
 class ChatIn(BaseModel):
     messages: list[Message] = Field(..., min_length=1)
-    max_new_tokens: int = Field(2048, ge=16, le=4096)
+    max_new_tokens: int = Field(2048, ge=16, le=32768)
     temperature: float = Field(0.7, ge=0.01, le=2.0)
     top_p: float = Field(0.9, ge=0.05, le=1.0)
 
 
 class ChatJobIn(BaseModel):
     messages: list[Message] = Field(..., min_length=1)
-    max_new_tokens: int = Field(2048, ge=16, le=4096)
+    max_new_tokens: int = Field(2048, ge=16, le=32768)
     temperature: float = Field(0.7, ge=0.01, le=2.0)
     top_p: float = Field(0.9, ge=0.05, le=1.0)
     session_id: int | None = None
@@ -93,7 +93,7 @@ class UserModelSettingsIn(BaseModel):
     system_prompt: str | None = None
     global_system_prompt: str | None = None
     # max_new_tokens / temperature / top_p: ignorados no PATCH (admin); usar body.llama → app_global.
-    max_new_tokens: int | None = Field(None, ge=16, le=4096)
+    max_new_tokens: int | None = Field(None, ge=16, le=32768)
     temperature: float | None = Field(None, ge=0.01, le=2.0)
     top_p: float | None = Field(None, ge=0.05, le=1.0)
     llama: LlamaServerSettingsIn | None = None

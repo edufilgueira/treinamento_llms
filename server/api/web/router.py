@@ -105,6 +105,18 @@ def _user_settings_out(uid: int) -> UserModelSettingsOut:
             top_p=float(ls["top_p"]),
             llama_server=llama_out,
         )
+    rt = get_runtime()
+    if rt.backend == "llama_server" and rt.is_loaded:
+        ls = get_llama_server_settings()
+        return UserModelSettingsOut(
+            is_admin=False,
+            system_prompt=s["system_prompt"],
+            global_system_prompt="",
+            max_new_tokens=int(ls["max_new_tokens"]),
+            temperature=float(ls["temperature"]),
+            top_p=float(ls["top_p"]),
+            llama_server=None,
+        )
     return UserModelSettingsOut(
         is_admin=False,
         system_prompt=s["system_prompt"],
