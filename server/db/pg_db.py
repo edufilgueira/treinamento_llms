@@ -261,6 +261,13 @@ def _ensure_chat_stats_columns(cur: Any) -> None:
         cur.execute(
             "ALTER TABLE chat_messages ADD COLUMN tokens_per_sec DOUBLE PRECISION NULL"
         )
+    if "admin_reviewed" not in have_m:
+        cur.execute(
+            """
+            ALTER TABLE chat_messages
+            ADD COLUMN admin_reviewed SMALLINT NOT NULL DEFAULT 0
+            """
+        )
 
 
 def _ensure_app_global_llama_columns(cur: Any) -> None:

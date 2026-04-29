@@ -46,6 +46,10 @@ class SessionTitleUpdate(BaseModel):
     title: str = Field(..., max_length=200)
 
 
+class AdminMessageReviewUpdate(BaseModel):
+    reviewed: bool = True
+
+
 class UserProfileUpdate(BaseModel):
     display_name: str = Field("", max_length=64)
     email: str = Field("", max_length=254)

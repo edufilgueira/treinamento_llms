@@ -16,13 +16,16 @@ pgrep -a llama-server
 kill -9 <PID>
 
 #  levantar servidor
-./build/bin/llama-server \
+nohup ./build/bin/llama-server \
   -m "$HOME/treinamento_llms/tools/quantized_model/Qwen3-8B-base-F16-Q4_K_M.gguf" \
   --host 0.0.0.0 \
   --port 8080 \
   -c 8192 \
   --reasoning off \
-  --reasoning-budget 0
+  --reasoning-budget 0 \
+  > llama.log 2>&1 &
+
+tail -f ~/treinamento_llms/tools/llama.cpp/llama.log
 ```
 
 

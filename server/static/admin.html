@@ -50,7 +50,14 @@
         <h2 class="modal__title" id="admin-view-title">Conversa</h2>
         <button type="button" class="modal__close" id="admin-view-close" aria-label="Fechar">×</button>
       </div>
-      <div class="admin-view-log" id="admin-view-log" aria-label="Mensagens"></div>
+      <main
+        id="admin-view-log"
+        class="chat-log admin-view-chat-log"
+        aria-label="Mensagens"
+        aria-live="polite"
+      >
+        <div class="chat-log-inner" id="admin-view-log-inner"></div>
+      </main>
     </div>
   </div>
 </body>

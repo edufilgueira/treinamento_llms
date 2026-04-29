@@ -123,7 +123,10 @@ def list_sessions(user_id: int, limit: int = 100) -> list[dict[str, Any]]:
 
 
 def get_session_messages(
-    user_id: int, session_id: int
+    user_id: int,
+    session_id: int,
+    *,
+    include_message_admin_meta: bool = False,
 ) -> tuple[list[dict[str, Any]], str, dict[str, Any]] | None:
     if not _owns(user_id, session_id):
         return None
@@ -144,15 +147,27 @@ def get_session_messages(
                 title = str(trow[0])
                 tot_tok = int(trow[1] or 0)
                 tot_sec = float(trow[2] or 0.0)
-                cur.execute(
-                    """
-                    SELECT role, content, output_tokens, gen_seconds, tokens_per_sec
-                    FROM chat_messages
-                    WHERE session_id = %s
-                    ORDER BY pos ASC, id ASC
-                    """,
-                    (session_id,),
-                )
+                if include_message_admin_meta:
+                    cur.execute(
+                        """
+                        SELECT id, role, content, output_tokens, gen_seconds,
+                               tokens_per_sec, COALESCE(admin_reviewed, 0)
+                        FROM chat_messages
+                        WHERE session_id = %s
+                        ORDER BY pos ASC, id ASC
+                        """,
+                        (session_id,),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT role, content, output_tokens, gen_seconds, tokens_per_sec
+                        FROM chat_messages
+                        WHERE session_id = %s
+                        ORDER BY pos ASC, id ASC
+                        """,
+                        (session_id,),
+                    )
                 rows = cur.fetchall()
         finally:
             con.close()
@@ -161,17 +176,63 @@ def get_session_messages(
         "total_gen_seconds": tot_sec,
     }
     msg_list: list[dict[str, Any]] = []
-    for r in rows:
-        d: dict[str, Any] = {"role": str(r[0]), "content": str(r[1])}
-        if str(r[0]) == "assistant":
-            if r[2] is not None:
-                d["output_tokens"] = int(r[2])
-            if r[3] is not None:
-                d["gen_seconds"] = float(r[3])
-            if r[4] is not None:
-                d["tokens_per_sec"] = float(r[4])
-        msg_list.append(d)
+    if include_message_admin_meta:
+        for r in rows:
+            role = str(r[1])
+            d: dict[str, Any] = {
+                "id": int(r[0]),
+                "role": role,
+                "content": str(r[2]),
+                "admin_reviewed": bool(int(r[6] or 0)),
+            }
+            if role == "assistant":
+                if r[3] is not None:
+                    d["output_tokens"] = int(r[3])
+                if r[4] is not None:
+                    d["gen_seconds"] = float(r[4])
+                if r[5] is not None:
+                    d["tokens_per_sec"] = float(r[5])
+            msg_list.append(d)
+    else:
+        for r in rows:
+            d = {"role": str(r[0]), "content": str(r[1])}
+            if str(r[0]) == "assistant":
+                if r[2] is not None:
+                    d["output_tokens"] = int(r[2])
+                if r[3] is not None:
+                    d["gen_seconds"] = float(r[3])
+                if r[4] is not None:
+                    d["tokens_per_sec"] = float(r[4])
+            msg_list.append(d)
     return (msg_list, title, session_meta)
+
+
+def set_assistant_message_admin_reviewed(
+    user_id: int,
+    session_id: int,
+    message_id: int,
+    reviewed: bool,
+) -> bool:
+    """Marca a mensagem assistente do turno como revista (painel admin)."""
+    if not _owns(user_id, session_id) or message_id < 1:
+        return False
+    flag = 1 if reviewed else 0
+    with _db_lock:
+        con = get_connection()
+        try:
+            with con:
+                with con.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE chat_messages
+                        SET admin_reviewed = %s
+                        WHERE id = %s AND session_id = %s AND role = 'assistant'
+                        """,
+                        (flag, message_id, session_id),
+                    )
+                    return cur.rowcount > 0
+        finally:
+            con.close()
 
 
 def delete_session(user_id: int, session_id: int) -> bool:

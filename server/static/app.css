@@ -1799,6 +1799,18 @@ body.auth-page {
   max-width: 32rem;
 }
 
+.admin-view-panel.modal__panel--wide {
+  max-width: min(42rem, 96vw);
+  max-height: min(88vh, 40rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 0.75rem;
+}
+.admin-view-panel .modal__head {
+  flex-shrink: 0;
+}
+
 .modal__head {
   display: flex;
   align-items: flex-start;
@@ -2093,7 +2105,11 @@ a.account-menu__item--link {
   border: 1px solid var(--border-subtle);
   border-radius: 0.55rem;
   padding: 0.75rem 0.85rem;
-  min-height: 12rem;
+  min-height: 0;
+  max-height: min(52vh, 28rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .admin-panel__h {
@@ -2129,7 +2145,8 @@ a.account-menu__item--link {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: min(50vh, 24rem);
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -2240,13 +2257,115 @@ a.account-menu__item--link {
   border-bottom: 0;
 }
 
-.admin-view-log {
-  max-height: min(60vh, 32rem);
-  overflow-y: auto;
+.admin-view-chat-log {
+  flex: 1 1 auto;
+  min-height: 0;
   margin-top: 0.25rem;
+  padding: 0.35rem 0.5rem 0.5rem;
+  overflow-y: auto;
   font-size: 0.9rem;
   line-height: 1.5;
-  padding: 0.25rem 0;
+  align-items: stretch;
+}
+.admin-view-chat-log .chat-log-inner {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding-bottom: 1rem;
+  gap: 1rem;
+}
+
+.admin-review-turn {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+.admin-review-turn__bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.45rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.admin-review-turn__toggle {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.35rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.admin-review-turn__toggle:hover,
+.admin-review-turn__toggle:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  outline: none;
+}
+.admin-review-turn__chev {
+  display: inline-block;
+  font-size: 0.65rem;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+.admin-review-turn:not(.admin-review-turn--collapsed) .admin-review-turn__chev {
+  transform: rotate(180deg);
+}
+.admin-review-turn__bar-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.admin-review-turn__actions {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.admin-review-turn__btn {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 0.35rem;
+  border: 1px solid rgba(120, 160, 255, 0.35);
+  background: rgba(80, 110, 180, 0.2);
+  color: #c8d4ff;
+  cursor: pointer;
+}
+.admin-review-turn__btn:hover:not(:disabled),
+.admin-review-turn__btn:focus-visible:not(:disabled) {
+  background: rgba(100, 130, 200, 0.35);
+  outline: none;
+}
+.admin-review-turn__btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.admin-review-turn__badge {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  color: #7dce9a;
+  font-weight: 500;
+}
+.admin-review-turn__body {
+  padding: 0.65rem 0.65rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.admin-review-turn__body[hidden] {
+  display: none !important;
+}
+.admin-review-turn__body .msg-stack--user {
+  max-width: min(85%, 36rem);
 }
 
 .admin-view-msg {

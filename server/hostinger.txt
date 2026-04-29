@@ -8,6 +8,7 @@ scp root@HOST:/root/treinamento_llms/trein/outputs/lora_adapter.zip ./
 
 segundo plano
 nohup ./serve.sh > app.log 2>&1 &
+nohup ./server/serve.sh > app.log 2>&1 &
 
 ps aux | grep python
 

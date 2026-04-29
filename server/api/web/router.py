@@ -39,12 +39,14 @@ from server.db.chat_sessions_db import (
     get_session_messages,
     list_sessions,
     plain_for_storage,
+    set_assistant_message_admin_reviewed,
     set_session_title_from_model,
     set_session_title_user,
     should_generate_title,
 )
 from server.inference.runtime import get_runtime
 from server.schemas.web import (
+    AdminMessageReviewUpdate,
     AuthIn,
     ChatIn,
     ChatJobIn,
@@ -570,7 +572,9 @@ async def api_admin_user_session(
 ) -> dict:
     if target_id < 1 or session_id < 1:
         raise HTTPException(status_code=400, detail="id inválido.")
-    out = get_session_messages(int(target_id), int(session_id))
+    out = get_session_messages(
+        int(target_id), int(session_id), include_message_admin_meta=True
+    )
     if not out:
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
     messages, title, session_meta = out
@@ -581,6 +585,27 @@ async def api_admin_user_session(
         "messages": messages,
         **session_meta,
     }
+
+
+@router.patch("/api/admin/users/{target_id}/sessions/{session_id}/messages/{message_id}/review")
+async def api_admin_mark_message_reviewed(
+    _admin: AdminIdDep,
+    target_id: int,
+    session_id: int,
+    message_id: int,
+    body: AdminMessageReviewUpdate,
+) -> dict[str, bool]:
+    if target_id < 1 or session_id < 1 or message_id < 1:
+        raise HTTPException(status_code=400, detail="id inválido.")
+    ok = set_assistant_message_admin_reviewed(
+        int(target_id),
+        int(session_id),
+        int(message_id),
+        bool(body.reviewed),
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Mensagem não encontrada.")
+    return {"ok": True}
 
 
 @router.get("/api/chat/generation-status")

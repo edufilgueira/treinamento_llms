@@ -11,7 +11,7 @@
   const sessionListEl = document.getElementById("admin-session-list");
   const viewModal = document.getElementById("admin-view-modal");
   const viewBackdrop = document.getElementById("admin-view-backdrop");
-  const viewLog = document.getElementById("admin-view-log");
+  const viewLog = document.getElementById("admin-view-log-inner");
   const viewTitle = document.getElementById("admin-view-title");
   const viewClose = document.getElementById("admin-view-close");
 
@@ -254,6 +254,214 @@
     }
   }
 
+  function groupMessagesToBlocks(msgs) {
+    const blocks = [];
+    let i = 0;
+    while (i < msgs.length) {
+      const m = msgs[i];
+      const role = m.role;
+      if (role !== "user" && role !== "assistant" && role !== "system") {
+        i += 1;
+        continue;
+      }
+      if (role === "system") {
+        blocks.push({ kind: "system", messages: [m] });
+        i += 1;
+        continue;
+      }
+      const users = [];
+      while (i < msgs.length && msgs[i].role === "user") {
+        users.push(msgs[i]);
+        i += 1;
+      }
+      let assistant = null;
+      if (i < msgs.length && msgs[i].role === "assistant") {
+        assistant = msgs[i];
+        i += 1;
+      }
+      blocks.push({ kind: "turn", users: users, assistant: assistant });
+    }
+    return blocks;
+  }
+
+  function appendAssistantStats(stack, m) {
+    if (
+      m.output_tokens == null &&
+      m.gen_seconds == null &&
+      m.tokens_per_sec == null
+    ) {
+      return;
+    }
+    const stEl = document.createElement("div");
+    stEl.className = "admin-view-msg__stats";
+    const parts = [];
+    if (m.output_tokens != null) {
+      parts.push(String(m.output_tokens) + " tokens");
+    }
+    if (m.gen_seconds != null) {
+      const n = Number(m.gen_seconds);
+      if (Number.isFinite(n) && n >= 0) {
+        parts.push(n.toFixed(1).replace(/\.0$/, "") + "s");
+      }
+    }
+    if (m.tokens_per_sec != null) {
+      parts.push(Number(m.tokens_per_sec).toFixed(2) + " t/s");
+    }
+    stEl.textContent = parts.join(" · ");
+    stack.appendChild(stEl);
+  }
+
+  function appendUserStack(parent, m) {
+    const stack = document.createElement("div");
+    stack.className = "msg-stack msg-stack--user";
+    const bubble = document.createElement("div");
+    bubble.className = "msg msg__text";
+    bubble.textContent = m.content != null ? String(m.content) : "";
+    stack.appendChild(bubble);
+    parent.appendChild(stack);
+  }
+
+  function appendAssistantStack(parent, m) {
+    const stack = document.createElement("div");
+    stack.className = "msg-stack msg-stack--assistant";
+    const bubble = document.createElement("div");
+    bubble.className = "msg msg__text";
+    renderMdInto(bubble, m.content);
+    stack.appendChild(bubble);
+    appendAssistantStats(stack, m);
+    parent.appendChild(stack);
+  }
+
+  function renderSystemBlock(container, messages) {
+    messages.forEach(function (m) {
+      const row = document.createElement("div");
+      row.className = "admin-view-msg admin-view-msg--sys";
+      const label = document.createElement("div");
+      label.className = "admin-view-msg__role";
+      label.textContent = "Sistema";
+      const body = document.createElement("div");
+      body.className = "admin-view-msg__body msg__text";
+      body.textContent = m.content != null ? String(m.content) : "";
+      row.appendChild(label);
+      row.appendChild(body);
+      container.appendChild(row);
+    });
+  }
+
+  function setTurnCollapsed(wrap, body, toggle, collapsed) {
+    wrap.classList.toggle("admin-review-turn--collapsed", collapsed);
+    body.hidden = collapsed;
+    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  }
+
+  function renderTurnBlock(uid, sessionId, block) {
+    const wrap = document.createElement("div");
+    wrap.className = "admin-review-turn";
+    const bar = document.createElement("div");
+    bar.className = "admin-review-turn__bar";
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "admin-review-turn__toggle";
+    toggle.setAttribute("aria-label", "Recolher ou expandir turno");
+    const chev = document.createElement("span");
+    chev.className = "admin-review-turn__chev";
+    chev.setAttribute("aria-hidden", "true");
+    chev.textContent = "▼";
+    toggle.appendChild(chev);
+    const assistant = block.assistant;
+    const reviewed = !!(assistant && assistant.admin_reviewed);
+    const assistantId =
+      assistant && assistant.id != null ? parseInt(assistant.id, 10) : NaN;
+
+    const actions = document.createElement("div");
+    actions.className = "admin-review-turn__actions";
+
+    let reviewBtn = null;
+    let badge = null;
+    if (assistant && !isNaN(assistantId)) {
+      if (reviewed) {
+        badge = document.createElement("span");
+        badge.className = "admin-review-turn__badge";
+        badge.textContent = "Revisado";
+        actions.appendChild(badge);
+      } else {
+        reviewBtn = document.createElement("button");
+        reviewBtn.type = "button";
+        reviewBtn.className = "admin-review-turn__btn";
+        reviewBtn.textContent = "Revisar";
+        actions.appendChild(reviewBtn);
+      }
+    }
+
+    bar.appendChild(toggle);
+    bar.appendChild(actions);
+
+    const body = document.createElement("div");
+    body.className = "admin-review-turn__body";
+    block.users.forEach(function (u) {
+      appendUserStack(body, u);
+    });
+    if (assistant) {
+      appendAssistantStack(body, assistant);
+    }
+
+    wrap.appendChild(bar);
+    wrap.appendChild(body);
+
+    setTurnCollapsed(wrap, body, toggle, reviewed);
+
+    toggle.addEventListener("click", function () {
+      const nowCollapsed = body.hidden;
+      setTurnCollapsed(wrap, body, toggle, !nowCollapsed);
+    });
+
+    if (reviewBtn) {
+      reviewBtn.addEventListener("click", function () {
+        reviewBtn.disabled = true;
+        void (async function () {
+          try {
+            const r = await apiFetch(
+              "/api/admin/users/" +
+                encodeURIComponent(String(uid)) +
+                "/sessions/" +
+                encodeURIComponent(String(sessionId)) +
+                "/messages/" +
+                encodeURIComponent(String(assistantId)) +
+                "/review",
+              {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reviewed: true }),
+              }
+            );
+            if (r.status === 401) {
+              window.location.href = "/login";
+              return;
+            }
+            if (!r.ok) {
+              reviewBtn.disabled = false;
+              return;
+            }
+            if (assistant) {
+              assistant.admin_reviewed = true;
+            }
+            reviewBtn.remove();
+            badge = document.createElement("span");
+            badge.className = "admin-review-turn__badge";
+            badge.textContent = "Revisado";
+            actions.appendChild(badge);
+            setTurnCollapsed(wrap, body, toggle, true);
+            wrap.classList.add("admin-review-turn--reviewed");
+          } catch (_e) {
+            reviewBtn.disabled = false;
+          }
+        })();
+      });
+    }
+
+    return wrap;
+  }
+
   async function openSession(uid, sessionId, title) {
     if (!viewModal || !viewLog || !viewTitle) return;
     try {
@@ -271,50 +479,18 @@
       viewTitle.textContent = (d.title || title || "Sessão").trim();
       viewLog.innerHTML = "";
       const msgs = d.messages || [];
-      msgs.forEach(function (m) {
-        const role = m.role;
-        if (role !== "user" && role !== "assistant" && role !== "system") {
-          return;
+      const blocks = groupMessagesToBlocks(msgs);
+      blocks.forEach(function (b) {
+        if (b.kind === "system") {
+          renderSystemBlock(viewLog, b.messages);
+        } else if (b.users.length > 0 || b.assistant) {
+          viewLog.appendChild(renderTurnBlock(uid, sessionId, b));
         }
-        const row = document.createElement("div");
-        row.className = "admin-view-msg admin-view-msg--" + (role === "user" ? "user" : role === "assistant" ? "assistant" : "sys");
-        const label = document.createElement("div");
-        label.className = "admin-view-msg__role";
-        label.textContent = role === "user" ? "Utilizador" : role === "assistant" ? "Assistente" : "Sistema";
-        const body = document.createElement("div");
-        body.className = "admin-view-msg__body";
-        if (role === "assistant") {
-          renderMdInto(body, m.content);
-        } else {
-          body.classList.add("msg__text");
-          body.textContent = m.content != null ? String(m.content) : "";
-        }
-        row.appendChild(label);
-        row.appendChild(body);
-        if (
-          role === "assistant" &&
-          (m.output_tokens != null || m.gen_seconds != null || m.tokens_per_sec != null)
-        ) {
-          const stEl = document.createElement("div");
-          stEl.className = "admin-view-msg__stats";
-          const parts = [];
-          if (m.output_tokens != null) {
-            parts.push(String(m.output_tokens) + " tokens");
-          }
-          if (m.gen_seconds != null) {
-            const n = Number(m.gen_seconds);
-            if (Number.isFinite(n) && n >= 0) {
-              parts.push(n.toFixed(1).replace(/\.0$/, "") + "s");
-            }
-          }
-          if (m.tokens_per_sec != null) {
-            parts.push(Number(m.tokens_per_sec).toFixed(2) + " t/s");
-          }
-          stEl.textContent = parts.join(" · ");
-          row.appendChild(stEl);
-        }
-        viewLog.appendChild(row);
       });
+      const logOuter = document.getElementById("admin-view-log");
+      if (logOuter) {
+        logOuter.scrollTop = 0;
+      }
       viewModal.hidden = false;
       if (viewBackdrop) {
         viewBackdrop.hidden = false;
