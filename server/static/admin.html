@@ -34,31 +34,26 @@
         <ul class="admin-session-list" id="admin-session-list" hidden></ul>
       </section>
     </div>
-  </div>
 
-  <div class="modal-backdrop" id="admin-view-backdrop" hidden aria-hidden="true"></div>
-  <div
-    class="modal admin-view-modal"
-    id="admin-view-modal"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="admin-view-title"
-    hidden
-  >
-    <div class="modal__panel modal__panel--wide admin-view-panel">
-      <div class="modal__head">
-        <h2 class="modal__title" id="admin-view-title">Conversa</h2>
-        <button type="button" class="modal__close" id="admin-view-close" aria-label="Fechar">×</button>
-      </div>
+    <section
+      class="admin-inline-view"
+      id="admin-session-view"
+      aria-labelledby="admin-view-title"
+    >
+      <h2 class="admin-inline-view__title" id="admin-view-title">Histórico</h2>
+      <p class="admin-placeholder" id="admin-session-view-placeholder">
+        Selecione uma sessão na lista acima.
+      </p>
       <main
         id="admin-view-log"
-        class="chat-log admin-view-chat-log"
-        aria-label="Mensagens"
+        class="chat-log admin-inline-chat-log"
+        aria-label="Mensagens da sessão"
         aria-live="polite"
+        hidden
       >
         <div class="chat-log-inner" id="admin-view-log-inner"></div>
       </main>
-    </div>
+    </section>
   </div>
 </body>
 </html>

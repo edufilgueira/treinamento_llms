@@ -1799,18 +1799,6 @@ body.auth-page {
   max-width: 32rem;
 }
 
-.admin-view-panel.modal__panel--wide {
-  max-width: min(42rem, 96vw);
-  max-height: min(88vh, 40rem);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding-bottom: 0.75rem;
-}
-.admin-view-panel .modal__head {
-  flex-shrink: 0;
-}
-
 .modal__head {
   display: flex;
   align-items: flex-start;
@@ -2257,20 +2245,38 @@ a.account-menu__item--link {
   border-bottom: 0;
 }
 
-.admin-view-chat-log {
-  flex: 1 1 auto;
-  min-height: 0;
-  margin-top: 0.25rem;
-  padding: 0.35rem 0.5rem 0.5rem;
+.admin-inline-view {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.admin-inline-view__title {
+  margin: 0 0 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.admin-inline-chat-log {
+  flex: none;
+  max-height: min(55vh, 28rem);
+  min-height: 8rem;
   overflow-y: auto;
-  font-size: 0.9rem;
-  line-height: 1.5;
+  padding: 0.6rem 0.35rem 0.85rem;
+  margin-top: 0.35rem;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.55rem;
   align-items: stretch;
 }
-.admin-view-chat-log .chat-log-inner {
+
+.admin-inline-chat-log .chat-log-inner {
   max-width: 48rem;
   margin: 0 auto;
-  padding-bottom: 1rem;
+  padding: 0 0.45rem 0.5rem;
   gap: 1rem;
 }
 

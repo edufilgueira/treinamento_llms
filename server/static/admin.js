@@ -9,11 +9,11 @@
   const sessionsTitle = document.getElementById("admin-sessions-title");
   const sessionsPlaceholder = document.getElementById("admin-sessions-placeholder");
   const sessionListEl = document.getElementById("admin-session-list");
-  const viewModal = document.getElementById("admin-view-modal");
-  const viewBackdrop = document.getElementById("admin-view-backdrop");
   const viewLog = document.getElementById("admin-view-log-inner");
+  const viewLogOuter = document.getElementById("admin-view-log");
   const viewTitle = document.getElementById("admin-view-title");
-  const viewClose = document.getElementById("admin-view-close");
+  const sessionViewPlaceholder = document.getElementById("admin-session-view-placeholder");
+  const sessionViewSection = document.getElementById("admin-session-view");
 
   const API_ORIGIN = (function () {
     try {
@@ -42,8 +42,10 @@
   let dompurifyHooked = false;
   function renderMdInto(el, raw) {
     const md = raw == null ? "" : String(raw);
+    el.classList.add("msg__text--md");
+    el.setAttribute("data-raw-md", md);
     if (!md) {
-      el.textContent = "";
+      el.innerHTML = "";
       return;
     }
     if (typeof marked === "undefined" || typeof marked.parse !== "function") {
@@ -64,7 +66,6 @@
       });
     }
     try {
-      el.classList.add("msg__text--md", "msg__text");
       const html = marked.parse(md);
       el.innerHTML = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
     } catch (_e) {
@@ -172,6 +173,22 @@
     });
   }
 
+  function resetSessionView() {
+    if (sessionViewPlaceholder) {
+      sessionViewPlaceholder.hidden = false;
+      sessionViewPlaceholder.textContent = "Selecione uma sessão na lista acima.";
+    }
+    if (viewLogOuter) {
+      viewLogOuter.hidden = true;
+    }
+    if (viewLog) {
+      viewLog.innerHTML = "";
+    }
+    if (viewTitle) {
+      viewTitle.textContent = "Histórico";
+    }
+  }
+
   function selectUser(uid, label) {
     selectedUserId = uid;
     selectedLabel = label || String(uid);
@@ -179,6 +196,7 @@
       sessionsTitle.textContent = "Sessões — " + selectedLabel;
     }
     updateUserRowHighlight();
+    resetSessionView();
     void loadSessions(uid);
   }
 
@@ -284,7 +302,7 @@
     return blocks;
   }
 
-  function appendAssistantStats(stack, m) {
+  function appendAssistantStatsBar(stack, m) {
     if (
       m.output_tokens == null &&
       m.gen_seconds == null &&
@@ -292,8 +310,10 @@
     ) {
       return;
     }
+    const bar = document.createElement("div");
+    bar.className = "msg-stack__bar";
     const stEl = document.createElement("div");
-    stEl.className = "admin-view-msg__stats";
+    stEl.className = "msg__stats";
     const parts = [];
     if (m.output_tokens != null) {
       parts.push(String(m.output_tokens) + " tokens");
@@ -307,16 +327,23 @@
     if (m.tokens_per_sec != null) {
       parts.push(Number(m.tokens_per_sec).toFixed(2) + " t/s");
     }
-    stEl.textContent = parts.join(" · ");
-    stack.appendChild(stEl);
+    const line = document.createElement("span");
+    line.className = "msg__stat";
+    line.textContent = parts.join(" · ");
+    stEl.appendChild(line);
+    bar.appendChild(stEl);
+    stack.appendChild(bar);
   }
 
   function appendUserStack(parent, m) {
     const stack = document.createElement("div");
     stack.className = "msg-stack msg-stack--user";
     const bubble = document.createElement("div");
-    bubble.className = "msg msg__text";
-    bubble.textContent = m.content != null ? String(m.content) : "";
+    bubble.className = "msg user";
+    const textEl = document.createElement("div");
+    textEl.className = "msg__text";
+    textEl.textContent = m.content != null ? String(m.content) : "";
+    bubble.appendChild(textEl);
     stack.appendChild(bubble);
     parent.appendChild(stack);
   }
@@ -325,10 +352,13 @@
     const stack = document.createElement("div");
     stack.className = "msg-stack msg-stack--assistant";
     const bubble = document.createElement("div");
-    bubble.className = "msg msg__text";
-    renderMdInto(bubble, m.content);
+    bubble.className = "msg assistant";
+    const textEl = document.createElement("div");
+    textEl.className = "msg__text";
+    renderMdInto(textEl, m.content);
+    bubble.appendChild(textEl);
     stack.appendChild(bubble);
-    appendAssistantStats(stack, m);
+    appendAssistantStatsBar(stack, m);
     parent.appendChild(stack);
   }
 
@@ -463,7 +493,7 @@
   }
 
   async function openSession(uid, sessionId, title) {
-    if (!viewModal || !viewLog || !viewTitle) return;
+    if (!viewLog || !viewTitle || !viewLogOuter) return;
     try {
       const r = await apiFetch(
         "/api/admin/users/" + encodeURIComponent(String(uid)) + "/sessions/" + encodeURIComponent(String(sessionId))
@@ -477,6 +507,10 @@
       }
       const d = await r.json();
       viewTitle.textContent = (d.title || title || "Sessão").trim();
+      if (sessionViewPlaceholder) {
+        sessionViewPlaceholder.hidden = true;
+      }
+      viewLogOuter.hidden = false;
       viewLog.innerHTML = "";
       const msgs = d.messages || [];
       const blocks = groupMessagesToBlocks(msgs);
@@ -487,28 +521,11 @@
           viewLog.appendChild(renderTurnBlock(uid, sessionId, b));
         }
       });
-      const logOuter = document.getElementById("admin-view-log");
-      if (logOuter) {
-        logOuter.scrollTop = 0;
+      viewLogOuter.scrollTop = 0;
+      if (sessionViewSection && typeof sessionViewSection.scrollIntoView === "function") {
+        sessionViewSection.scrollIntoView({ behavior: "smooth", block: "start" });
       }
-      viewModal.hidden = false;
-      if (viewBackdrop) {
-        viewBackdrop.hidden = false;
-        viewBackdrop.setAttribute("aria-hidden", "false");
-      }
-      viewModal.setAttribute("aria-hidden", "false");
     } catch (_) {}
-  }
-
-  function closeView() {
-    if (viewModal) {
-      viewModal.hidden = true;
-      viewModal.setAttribute("aria-hidden", "true");
-    }
-    if (viewBackdrop) {
-      viewBackdrop.hidden = true;
-      viewBackdrop.setAttribute("aria-hidden", "true");
-    }
   }
 
   if (listEl) {
@@ -519,26 +536,6 @@
       if (isNaN(uid)) return;
       const name = li.querySelector(".admin-user-row__name");
       selectUser(uid, name ? name.textContent : null);
-    });
-  }
-
-  if (viewClose) {
-    viewClose.addEventListener("click", closeView);
-  }
-  if (viewBackdrop) {
-    viewBackdrop.addEventListener("click", closeView);
-  }
-  document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && viewModal && !viewModal.hidden) {
-      closeView();
-    }
-  });
-
-  if (viewModal) {
-    viewModal.addEventListener("click", function (e) {
-      if (e.target === viewModal) {
-        closeView();
-      }
     });
   }
 
