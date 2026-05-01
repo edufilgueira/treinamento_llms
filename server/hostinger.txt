@@ -17,6 +17,7 @@ tail -f ~/treinamento_llms/server/app.log
 find ~ -type d -name ".venv"
 
 # Variáveis: copiar para server/.env (ver server/.env.example), não colocar passwords aqui.
+# Ou systemd: EnvironmentFile=... ou Environment= ligado ao mesmo ficheiro; .ini próprio não é lido pelo Python dotenv.
 # ORACULO_LLAMA_CPP_BASE_URL=http://127.0.0.1:8080
 # ORACULO_PG_HOST=127.0.0.1
 # ORACULO_PG_PORT=5432

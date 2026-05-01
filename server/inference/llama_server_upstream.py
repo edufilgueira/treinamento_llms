@@ -16,13 +16,6 @@ import httpx
 DEFAULT_TIMEOUT = httpx.Timeout(600.0, connect=30.0)
 
 
-def _base_url(raw: str) -> str:
-    s = (raw or "").strip().rstrip("/")
-    if not s:
-        raise ValueError("base URL vazia")
-    return s
-
-
 def chat_template_kwargs_from_env() -> dict[str, Any] | None:
     raw = (os.environ.get("ORACULO_LLAMA_CPP_CHAT_TEMPLATE_KWARGS") or "").strip()
     if not raw:
@@ -34,30 +27,43 @@ def chat_template_kwargs_from_env() -> dict[str, Any] | None:
     return out if isinstance(out, dict) else None
 
 
-def resolve_chat_template_kwargs_merged() -> dict[str, Any] | None:
-    """Env ORACULO_LLAMA_CPP_CHAT_TEMPLATE_KWARGS + reasoning (off/on/auto) da base (admin)."""
+def resolve_chat_template_kwargs_merged() -> dict[str, Any]:
+    """
+    Kwargs para o chat template enviadas em cada pedido ao llama-server.
+    Define sempre enable_thinking (ninguém fica ao default ambíguo do servidor):
+
+    - off: força disable (sobrepõe env).
+    - on: força enable.
+    - auto: só o que vier em ORACULO_LLAMA_CPP_CHAT_TEMPLATE_KWARGS e, sem chave lá, assume False.
+    """
     from server.db.auth_db import get_llama_server_settings
 
     base = chat_template_kwargs_from_env()
     out: dict[str, Any] = dict(base) if base else {}
     s = get_llama_server_settings()
     r = str(s.get("reasoning") or "off").strip().lower()
-    if r == "off":
-        out["enable_thinking"] = False
-    elif r == "on":
+    if r == "on":
         out["enable_thinking"] = True
-    return out if out else None
+    elif r == "off":
+        out["enable_thinking"] = False
+    else:
+        out.setdefault("enable_thinking", False)
+    return out
 
 
 def payload_sampling_extras_from_db() -> dict[str, Any]:
-    """Campos extra para /v1/chat/completions (repeat_penalty, etc.) vindos da base."""
+    """Campos extra para /v1/chat/completions; reasoning_budget vai a 0 com pensamento suprimido pelo template."""
     from server.db.auth_db import get_llama_server_settings
 
     s = get_llama_server_settings()
+    tmpl = resolve_chat_template_kwargs_merged()
+    rb = int(s["reasoning_budget"])
+    if tmpl.get("enable_thinking") is False:
+        rb = 0
     return {
         "repeat_penalty": float(s["repeat_penalty"]),
         "repeat_last_n": int(s["repeat_last_n"]),
-        "reasoning_budget": int(s["reasoning_budget"]),
+        "reasoning_budget": rb,
     }
 
 
@@ -76,6 +82,13 @@ def fetch_default_model_id(base: str, api_key: str | None) -> str:
         if mid:
             return str(mid)
     return "default"
+
+
+def _base_url(raw: str) -> str:
+    s = (raw or "").strip().rstrip("/")
+    if not s:
+        raise ValueError("base URL vazia")
+    return s
 
 
 def _headers_json(api_key: str | None) -> dict[str, str]:
@@ -209,7 +222,9 @@ def chat_completions_stream_deltas(
                     continue
                 if "error" in chunk:
                     err = chunk["error"]
-                    msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                    msg = (
+                        err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                    )
                     raise RuntimeError(msg)
                 chs = chunk.get("choices") or []
                 if not chs:

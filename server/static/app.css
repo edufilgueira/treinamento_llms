@@ -1023,16 +1023,10 @@ body.menu-open {
   pointer-events: auto;
 }
 
-/* Telemóveis / toque: não há :hover; o botão tem de ser visível e clicável. */
+/* Telemóveis / toque: sem :hover → copiar oculto por defeito; tap na bolha (JS) aplica msg-stack--copy-pinned. */
 @media (hover: none) {
-  .msg-stack .msg__copy {
-    opacity: 0.9;
-    pointer-events: auto;
+  .msg-stack--copy-pinned .msg__copy {
     -webkit-tap-highlight-color: rgba(255, 255, 255, 0.08);
-  }
-
-  .msg-stack.msg-stack--copy-pinned .msg__copy {
-    opacity: 1;
   }
 
   .msg__copy::before {

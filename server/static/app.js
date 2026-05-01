@@ -193,6 +193,41 @@
 
   const SWIPE_CLOSE_PX = 72;
   const MEDIA_MOBILE = window.matchMedia("(max-width: 768px)");
+  /** Coarse/touch UA: usar tap na bolha para mostrar Copiar (não há hover). */
+  const MEDIA_HOVER_NONE =
+    typeof window.matchMedia === "function" ? window.matchMedia("(hover: none)") : null;
+
+  function prefersNoHover() {
+    return MEDIA_HOVER_NONE && MEDIA_HOVER_NONE.matches;
+  }
+
+  /** Clic fora das mensagens: esconder botão Copiar destacado em telemóvel. */
+  let copyPinnedOutsideCloserInstalled = false;
+  function ensureCopyPinnedOutsideCloser() {
+    if (copyPinnedOutsideCloserInstalled) return;
+    copyPinnedOutsideCloserInstalled = true;
+    document.addEventListener(
+      "click",
+      function (ev) {
+        if (!prefersNoHover()) return;
+        var t = ev.target;
+        if (!t.closest || !t.closest(".msg-stack")) {
+          setCopyPinnedStack(null);
+        }
+      },
+      false
+    );
+  }
+
+  function bindMessageTapToRevealCopy(stack, bubbleEl) {
+    ensureCopyPinnedOutsideCloser();
+    bubbleEl.addEventListener("click", function (ev) {
+      if (!prefersNoHover()) return;
+      var el = ev.target;
+      if (el.closest && (el.closest("a") || el.closest("button"))) return;
+      setCopyPinnedStack(stack);
+    });
+  }
 
   function updateComposerExpanded() {
     if (!composerEl || !inputEl) return;
@@ -941,6 +976,7 @@
     } else {
       stack.appendChild(copyBtn);
     }
+    bindMessageTapToRevealCopy(stack, bubble);
     logInner.appendChild(stack);
     updateEmptyState();
     scrollLog();
@@ -963,10 +999,11 @@
     bubble.appendChild(textEl);
     stack.appendChild(bubble);
     stack.appendChild(bar);
+    bindMessageTapToRevealCopy(stack, bubble);
     logInner.appendChild(stack);
     updateEmptyState();
     scrollLog();
-    return { div: bubble, textEl, statsEl };
+    return { stack: stack, div: bubble, textEl: textEl, statsEl: statsEl };
   }
 
   function clearChat() {

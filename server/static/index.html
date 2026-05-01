@@ -311,7 +311,11 @@
           </div>
           <div>
             <label class="modal__label" for="settings-llama-reasoning">Reasoning</label>
-            <select id="settings-llama-reasoning" class="modal__input">
+            <select
+              id="settings-llama-reasoning"
+              class="modal__input"
+              title="Envia enable_thinking em cada pedido ao llama-server: off ou on forçam; auto usa só o JSON do ambiente (ORACULO_LLAMA_CPP_CHAT_TEMPLATE_KWARGS), e se não tiver chave enable_thinking fica desligado."
+            >
               <option value="off">off</option>
               <option value="on">on</option>
               <option value="auto">auto</option>
@@ -321,7 +325,7 @@
             <span class="modal__label">Reasoning budget</span>
             <label
               class="modal__check modal__check--block"
-              title="Desligado: 0. Ligado: −1 (orçamento ilimitado no llama-server, se o modelo suportar)."
+              title="−1 = orçamento ilimitado (só faz efeito se o pensamento estiver ligado). Com pensamento desligado, o servidor recebe sempre reasoning_budget 0."
             >
               <input type="checkbox" id="settings-llama-reasoning-budget-on" />
               <span>Ligado</span>
