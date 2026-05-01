@@ -370,7 +370,7 @@ body.menu-open {
   margin-top: 0.5rem;
 }
 
-/* Área principal */
+/* Área principal: coluna com scroll (.main-scroll = topbar + log), depois banner de ocupação, depois composer (fora do scroll). */
 
 .main-wrap {
   flex: 1;
@@ -392,7 +392,7 @@ body.menu-open {
   overflow-y: auto;
   scrollbar-color: var(--scrollbar-main-thumb) var(--scrollbar-main-track);
   scrollbar-width: auto;
-  scroll-padding-bottom: clamp(6rem, 22vh, 14rem);
+  scroll-padding-bottom: 1rem;
 }
 
 .main-scroll::-webkit-scrollbar {
@@ -707,7 +707,8 @@ body.menu-open {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  padding-bottom: calc(1rem + clamp(5rem, 18vh, 11rem));
+  /* O composer está fora do scroll (.main-wrap → rodapé fixo na coluna); só precisa de espaço residual. */
+  padding-bottom: 1rem;
 }
 
 .chat-log-inner:empty {
@@ -1059,6 +1060,7 @@ body.menu-open {
   line-height: 1.4;
   z-index: 3;
   position: relative;
+  width: 100%;
 }
 
 .server-busy-banner__ic {
@@ -1083,31 +1085,30 @@ body.menu-open {
   pointer-events: none;
 }
 
-/* Compositor (suspenso: sticky no fundo da coluna) */
-
+/* Composer: último flex da coluna — nunca vai dentro .main-scroll; sem sticky para ficar sempre visível no rodapé. */
 .composer-outer {
   flex-shrink: 0;
-  position: sticky;
-  bottom: 0;
+  position: relative;
   z-index: 4;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   padding: 0.65rem 1rem 0;
   isolation: isolate;
+  background: var(--main-bg);
 }
 
 /* Faixa opaca colada ao rodapé: o cartão (.composer-wrap) fica por cima; tapa vazamento do radius e “ancora” o fundo. */
 .composer-shield {
   flex-shrink: 0;
   width: 100%;
-  min-height: 1.25rem;
-  margin-top: -0.875rem;
+  min-height: 1rem;
+  margin-top: -0.65rem;
   background: var(--main-bg);
   position: relative;
   z-index: 1;
   pointer-events: none;
-  margin-bottom: -6px;
+  margin-bottom: 0;
 }
 
 .composer-wrap {
