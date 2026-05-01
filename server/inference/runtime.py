@@ -155,10 +155,8 @@ class ModelRuntime:
             if not self._upstream_base:
                 raise RuntimeError("llama-server não configurado.")
             from server.db.auth_db import get_llama_server_settings
-            from server.services.llama_context import (
-                cap_max_new_tokens_for_n_ctx,
-                prepare_messages_for_llama_upstream,
-            )
+            from server.services.llama_context import cap_max_new_tokens_for_n_ctx
+            from server.services.history import finalize_messages_for_upstream
 
             from .llama_server_upstream import (
                 chat_completions_complete,
@@ -170,8 +168,8 @@ class ModelRuntime:
             mnt_eff = cap_max_new_tokens_for_n_ctx(
                 int(ls["n_ctx"]), int(max_new_tokens)
             )
-            messages = prepare_messages_for_llama_upstream(
-                messages, max_new_tokens=mnt_eff
+            messages = finalize_messages_for_upstream(
+                messages, user_id=user_id, max_new_tokens=mnt_eff
             )
             text, usage = chat_completions_complete(
                 self._upstream_base,
@@ -207,10 +205,8 @@ class ModelRuntime:
             with self._last_openai_lock:
                 self._last_openai_usage = None
             from server.db.auth_db import get_llama_server_settings
-            from server.services.llama_context import (
-                cap_max_new_tokens_for_n_ctx,
-                prepare_messages_for_llama_upstream,
-            )
+            from server.services.llama_context import cap_max_new_tokens_for_n_ctx
+            from server.services.history import finalize_messages_for_upstream
 
             from .llama_server_upstream import (
                 chat_completions_stream_deltas,
@@ -222,8 +218,8 @@ class ModelRuntime:
             mnt_eff = cap_max_new_tokens_for_n_ctx(
                 int(ls["n_ctx"]), int(max_new_tokens)
             )
-            messages = prepare_messages_for_llama_upstream(
-                messages, max_new_tokens=mnt_eff
+            messages = finalize_messages_for_upstream(
+                messages, user_id=user_id, max_new_tokens=mnt_eff
             )
             yield from chat_completions_stream_deltas(
                 self._upstream_base,

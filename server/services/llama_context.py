@@ -46,10 +46,14 @@ def _total_content_chars(messages: list[dict]) -> int:
     return sum(len(str(m.get("content") or "")) for m in messages)
 
 
-def _prompt_token_budget(*, n_ctx: int, max_new_tokens: int) -> int:
+def _prompt_token_budget(
+    *, n_ctx: int, max_new_tokens: int, reserve_prompt_tokens: int = 0
+) -> int:
+    """Sobra para o prompt; ``reserve_prompt_tokens`` reserva espaço (ex.: bloco dinâmico pós-truncagem)."""
     n_ctx = max(256, int(n_ctx))
     mnt = max(16, int(max_new_tokens))
-    return max(1, n_ctx - mnt)
+    rp = max(0, int(reserve_prompt_tokens))
+    return max(1, n_ctx - mnt - rp)
 
 
 def truncate_messages_to_ctx_budget(
@@ -57,11 +61,20 @@ def truncate_messages_to_ctx_budget(
     *,
     n_ctx: int,
     max_new_tokens: int,
+    reserve_prompt_tokens: int = 0,
 ) -> list[dict]:
-    """Remove turnos antigos até a estimativa do prompt caber em (n_ctx − max_tokens)."""
+    """Remove turnos antigos até a estimativa do prompt caber em (n_ctx − max_tokens).
+
+    ``reserve_prompt_tokens`` reduz o orçamento útil antes de cortar mensagens —
+    usar quando, após truncar, se acrescenta texto ao prompt (ex.: contexto sessão).
+    """
     if not messages:
         return messages
-    prompt_budget = _prompt_token_budget(n_ctx=n_ctx, max_new_tokens=max_new_tokens)
+    prompt_budget = _prompt_token_budget(
+        n_ctx=n_ctx,
+        max_new_tokens=max_new_tokens,
+        reserve_prompt_tokens=reserve_prompt_tokens,
+    )
 
     msgs = deepcopy(messages)
     system_msgs = [m for m in msgs if str(m.get("role") or "").lower() == "system"]
