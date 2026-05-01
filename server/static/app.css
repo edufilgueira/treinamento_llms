@@ -667,10 +667,10 @@ body.menu-open {
   color: #7dce9a;
 }
 
-/* Lista de mensagens */
-
+/* Lista de mensagens: flex 1 1 0% absorve o espaço entre topbar e composer (evita “vão” no meio no telemóvel). */
 .chat-log {
-  flex: 1 0 auto;
+  flex: 1 1 0%;
+  min-height: 0;
   padding: 1rem 1rem 0.5rem;
   display: flex;
   flex-direction: column;
@@ -1447,6 +1447,13 @@ body.menu-open {
   .chat-log {
     padding-left: 0.75rem;
     padding-right: 0.75rem;
+  }
+
+  /* Coluna de mensagens preenche até ao composer; só quando há conteúdo (vazio mantém o centro “Como posso ajudar?”). */
+  .chat-log-inner:not(:empty) {
+    flex: 1 1 0%;
+    min-height: 0;
+    align-self: stretch;
   }
 
   .composer-outer {
