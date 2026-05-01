@@ -253,6 +253,18 @@
     }
   }
 
+  /** Depois da resposta do modelo: uma linha, sem composer--expanded (estado inicial da sessão). */
+  function collapseComposerToSingleRow() {
+    if (!composerEl || !inputEl) return;
+    composerEl.classList.remove("composer--expanded");
+    inputEl.style.removeProperty("height");
+    autoResizeInput();
+    const body = inputEl.closest(".composer-body");
+    if (body) {
+      body.scrollTop = 0;
+    }
+  }
+
   const SEND_BTN_ICON =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V6"/><path d="m5 12 7-6 7 6"/></svg>';
 
@@ -1011,7 +1023,7 @@
     history.length = 0;
     logInner.innerHTML = "";
     inputEl.value = "";
-    autoResizeInput();
+    collapseComposerToSingleRow();
     delete sendBtn.dataset.busy;
     updateSendState();
     updateEmptyState();
@@ -1553,9 +1565,19 @@
       }
       delete sendBtn.dataset.busy;
       updateSendState();
+      collapseComposerToSingleRow();
       void loadSessionList();
       void tickGenerationStatus();
-      inputEl.focus();
+      /* Telemóvel (web): foco abre teclado e encolhe o ecrã; desktop mantém foco para continuar a escrever. */
+      if (MEDIA_MOBILE.matches) {
+        inputEl.blur();
+      } else if (document.visibilityState === "visible") {
+        try {
+          inputEl.focus({ preventScroll: true });
+        } catch (_e) {
+          inputEl.focus();
+        }
+      }
     }
   }
 

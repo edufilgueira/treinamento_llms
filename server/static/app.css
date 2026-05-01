@@ -719,7 +719,7 @@ body.menu-open {
 .msg-stack {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  /*gap: 0.35rem;*/
 }
 
 .msg-stack--user {
@@ -891,7 +891,7 @@ body.menu-open {
 .msg.assistant {
   width: 100%;
   max-width: 100%;
-  padding: 0.35rem 0;
+  /*padding: 0.35rem 0;*/
   color: var(--text);
 }
 
