@@ -17,6 +17,9 @@
   --scrollbar-main-track: rgba(255, 255, 255, 0.06);
   --scrollbar-main-thumb: rgba(255, 255, 255, 0.28);
   --scrollbar-main-thumb-hover: rgba(255, 255, 255, 0.42);
+  /* Listas Recentes na sidebar (#171717) e no menu móvel (#000): polegar discreto como na referência, track transparente */
+  --nav-scrollbar-thumb: #424242;
+  --nav-scrollbar-thumb-hover: #525252;
 }
 
 * {
@@ -117,6 +120,40 @@ body.menu-open {
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
+}
+
+/* Sidebar + menu móvel: barra estreita, sem track visível (Chrome/Safari/Edge + Firefox scrollbar-color); em iOS/Android o SO pode manter scrollbar nativa até ao gesto — sem conflitos com esta cor. */
+.sidebar .session-list,
+.mobile-menu .session-list,
+.mobile-menu__acct-dd {
+  scrollbar-width: thin;
+  scrollbar-color: var(--nav-scrollbar-thumb) transparent;
+}
+
+.sidebar .session-list::-webkit-scrollbar,
+.mobile-menu .session-list::-webkit-scrollbar,
+.mobile-menu__acct-dd::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.sidebar .session-list::-webkit-scrollbar-track,
+.mobile-menu .session-list::-webkit-scrollbar-track,
+.mobile-menu__acct-dd::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar .session-list::-webkit-scrollbar-thumb,
+.mobile-menu .session-list::-webkit-scrollbar-thumb,
+.mobile-menu__acct-dd::-webkit-scrollbar-thumb {
+  background-color: var(--nav-scrollbar-thumb);
+  border-radius: 999px;
+}
+
+.sidebar .session-list::-webkit-scrollbar-thumb:hover,
+.mobile-menu .session-list::-webkit-scrollbar-thumb:hover,
+.mobile-menu__acct-dd::-webkit-scrollbar-thumb:hover {
+  background-color: var(--nav-scrollbar-thumb-hover);
 }
 
 .session-list__item {
