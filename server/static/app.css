@@ -1993,9 +1993,11 @@ a.account-menu__item--link {
 }
 
 .mobile-menu__admin-link {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
   width: 100%;
-  text-align: center;
   margin-top: 0.5rem;
   padding: 0.5rem 0.75rem;
   font-size: 0.8rem;
@@ -2004,6 +2006,11 @@ a.account-menu__item--link {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 0.45rem;
   background: rgba(255, 255, 255, 0.04);
+  box-sizing: border-box;
+}
+
+.mobile-menu__admin-link .account-menu__ico {
+  opacity: 0.88;
 }
 
 .mobile-menu__admin-link:hover,
@@ -2011,6 +2018,11 @@ a.account-menu__item--link {
   background: rgba(255, 255, 255, 0.08);
   color: #e8dcc8;
   outline: none;
+}
+
+.mobile-menu__admin-link:hover .account-menu__ico,
+.mobile-menu__admin-link:focus-visible .account-menu__ico {
+  opacity: 1;
 }
 
 /* Página /admin */

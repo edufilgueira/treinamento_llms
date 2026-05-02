@@ -253,7 +253,7 @@
     }
   }
 
-  /** Depois da resposta do modelo: uma linha, sem composer--expanded (estado inicial da sessão). */
+  /** Uma linha, sem composer--expanded — após enviar (imediatamente) e depois da resposta. */
   function collapseComposerToSingleRow() {
     if (!composerEl || !inputEl) return;
     composerEl.classList.remove("composer--expanded");
@@ -1444,7 +1444,7 @@
     logUserFollowingBottom = true;
 
     inputEl.value = "";
-    autoResizeInput();
+    collapseComposerToSingleRow();
     updateSendState();
 
     appendMessage("user", text);
