@@ -22,6 +22,8 @@
   const mobileMenuPanel = document.getElementById("mobile-menu-panel");
   const sessionListEl = document.getElementById("session-list");
   const sessionListMenuEl = document.getElementById("session-list-menu");
+  const mobileAccountTrigger = document.getElementById("mobile-account-trigger");
+  const mobileAccountDd = document.getElementById("mobile-account-dd");
 
   const history = [];
   let currentSessionId = null;
@@ -399,9 +401,25 @@
     emptyState.hidden = hasMessages;
   }
 
+  function closeMobileAccountDropdown() {
+    if (!mobileAccountDd || !mobileAccountTrigger) return;
+    mobileAccountDd.hidden = true;
+    mobileAccountTrigger.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleMobileAccountDropdown(ev) {
+    if (ev) ev.stopPropagation();
+    closeAccountDropdownDesk();
+    if (!mobileAccountDd || !mobileAccountTrigger) return;
+    const show = mobileAccountDd.hidden;
+    mobileAccountDd.hidden = !show;
+    mobileAccountTrigger.setAttribute("aria-expanded", show ? "true" : "false");
+  }
+
   function openMobileMenu() {
     if (!MEDIA_MOBILE.matches) return;
     if (!mobileMenu || !menuToggle || !menuNewChatBtn) return;
+    closeMobileAccountDropdown();
     mobileMenu.classList.add("is-open");
     mobileMenu.setAttribute("aria-hidden", "false");
     menuToggle.setAttribute("aria-expanded", "true");
@@ -410,6 +428,7 @@
   }
 
   function closeMobileMenu() {
+    closeMobileAccountDropdown();
     if (mobileMenuPanel) {
       mobileMenuPanel.classList.remove("is-dragging");
       mobileMenuPanel.style.transform = "";
@@ -531,18 +550,46 @@
     });
   }
 
+  function initialsForAvatar(nameStr, fallbackUsername) {
+    const nm = nameStr != null && String(nameStr).trim() ? String(nameStr).trim() : "";
+    const un =
+      fallbackUsername != null && String(fallbackUsername).trim()
+        ? String(fallbackUsername).trim()
+        : "";
+    const src = nm || un;
+    if (!src) return "?";
+    const parts = src.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      var a = parts[0].charAt(0);
+      var b = parts[parts.length - 1].charAt(0);
+      return (a + b).toUpperCase();
+    }
+    const one = parts[0];
+    if (one.length >= 2) return one.slice(0, 2).toUpperCase();
+    return one.charAt(0).toUpperCase();
+  }
+
   function setUserNameLabels(name, username) {
-    const t = (name != null && name !== "" ? name : null) || username || "";
-    const u = username || t;
+    const display =
+      name != null && String(name).trim() !== ""
+        ? String(name).trim()
+        : "";
+    const u = username != null && String(username).trim() !== "" ? String(username).trim() : "";
+    const t = display || u || "";
     const desk = document.getElementById("user-name-desk");
     const menu = document.getElementById("user-name-menu");
     if (desk) {
       desk.textContent = t;
-      desk.setAttribute("title", u);
+      desk.setAttribute("title", u || t || "");
     }
     if (menu) {
       menu.textContent = t;
-      menu.setAttribute("title", u);
+      menu.setAttribute("title", u || t || "");
+    }
+    const av = document.getElementById("mobile-user-avatar");
+    if (av) {
+      const nmForInitials = display || null;
+      av.textContent = initialsForAvatar(nmForInitials, u || null);
     }
   }
 
@@ -569,7 +616,17 @@
     if (accountMenuDesk && !accountMenuDesk.contains(e.target)) {
       closeAccountDropdownDesk();
     }
+    const mobAcctShell = document.getElementById("mobile-menu-acct");
+    if (mobAcctShell && !mobAcctShell.contains(e.target)) {
+      closeMobileAccountDropdown();
+    }
   });
+
+  if (mobileAccountTrigger) {
+    mobileAccountTrigger.addEventListener("click", function (e) {
+      toggleMobileAccountDropdown(e);
+    });
+  }
 
   function showModalPair(show) {
     if (modalBackdrop) {
@@ -588,6 +645,7 @@
   }
 
   async function openProfileModal() {
+    closeMobileAccountDropdown();
     closeAccountDropdownDesk();
     if (MEDIA_MOBILE.matches && mobileMenu && mobileMenu.classList.contains("is-open")) {
       closeMobileMenu();
@@ -622,6 +680,7 @@
   }
 
   async function openSettingsModal() {
+    closeMobileAccountDropdown();
     closeAccountDropdownDesk();
     if (MEDIA_MOBILE.matches && mobileMenu && mobileMenu.classList.contains("is-open")) {
       closeMobileMenu();
@@ -826,6 +885,7 @@
   }
 
   async function doLogout() {
+    closeMobileAccountDropdown();
     try {
       await apiFetch("/api/auth/logout", { method: "POST" });
     } catch (_) {}
@@ -834,6 +894,7 @@
 
   document.getElementById("logout-desk")?.addEventListener("click", doLogout);
   document.getElementById("logout-menu")?.addEventListener("click", doLogout);
+  document.getElementById("open-admin-m")?.addEventListener("click", closeMobileAccountDropdown);
 
   /** Se o fundo está a menos disto que isto em px, considera-se seguir o stream até ao fundo — valor baixo para um deslize mínimo cortar follow. */
   const LOG_BOTTOM_THRESHOLD_PX = 28;
@@ -1744,6 +1805,11 @@
 
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
+    if (mobileAccountDd && !mobileAccountDd.hidden) {
+      closeMobileAccountDropdown();
+      e.preventDefault();
+      return;
+    }
     if (modalBackdrop && !modalBackdrop.hidden) {
       closeAllModals();
       return;

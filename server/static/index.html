@@ -16,48 +16,73 @@
 <body>
   <div id="mobile-menu" class="mobile-menu" aria-hidden="true">
     <div class="mobile-menu__panel" id="mobile-menu-panel">
-      <p class="mobile-menu__brand">Oráculo Kiaiá</p>
-      <div class="mobile-menu__user">
-        <span class="user-name" id="user-name-menu" title=""></span>
-        <div class="mobile-menu__account-btns">
-          <button type="button" class="btn-ghost btn-ghost--icon" id="open-profile-m">
-            <svg class="account-menu__ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-            </svg>
-            Perfil
-          </button>
-          <button type="button" class="btn-ghost btn-ghost--icon" id="open-settings-m">
-            <svg class="account-menu__ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-            Configurações
-          </button>
-        </div>
-        <a href="/admin" class="mobile-menu__admin-link admin-only" id="open-admin-m" hidden>
-          <svg class="account-menu__ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M3 3v18h18"/>
-            <path d="M18 17V9"/>
-            <path d="M13 17V5"/>
-            <path d="M8 17v-3"/>
-          </svg>
-          Monitorização (admin)
-        </a>
-        <button type="button" class="btn-logout logout-btn" id="logout-menu">Sair</button>
-      </div>
-      <button type="button" class="menu-new-chat" id="menu-new-chat">
+      <button type="button" class="menu-new-chat menu-new-chat--gpt" id="menu-new-chat">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M12 5v14M5 12h14"/>
+          <path d="M12 20h9"/>
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
         </svg>
         Novo chat
       </button>
-      <div class="sessions-recent mobile-sessions">
-        <h2 class="sessions-recent__label">Recentes</h2>
-        <ul class="session-list" id="session-list-menu" aria-label="Conversas recentes"></ul>
+
+      <div class="mobile-menu__scroll">
+        <div class="sessions-recent mobile-sessions mobile-menu__sessions-inner">
+          <h2 class="sessions-recent__label">Recentes</h2>
+          <ul class="session-list" id="session-list-menu" aria-label="Conversas recentes"></ul>
+        </div>
       </div>
-      <div id="menu-status" class="ready">kiaia1.1</div>
-      <p class="mobile-menu__hint">Deslize para a esquerda para voltar ao diálogo</p>
+
+      <footer class="mobile-menu__footer">
+        <div class="mobile-menu__acct" id="mobile-menu-acct">
+          <button
+            type="button"
+            class="mobile-menu__acct-trigger"
+            id="mobile-account-trigger"
+            aria-expanded="false"
+            aria-haspopup="menu"
+            aria-controls="mobile-account-dd"
+          >
+            <span class="mobile-menu__avatar" id="mobile-user-avatar" aria-hidden="true">?</span>
+            <span class="mobile-menu__acct-name" id="user-name-menu"></span>
+            <svg class="mobile-menu__acct-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m9 18 6-6-6-6"/>
+            </svg>
+          </button>
+          <ul class="mobile-menu__acct-dd" id="mobile-account-dd" role="menu" hidden>
+            <li>
+              <button type="button" class="mobile-menu__acct-item" role="menuitem" id="open-profile-m">
+                <svg class="account-menu__ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                </svg>
+                Perfil
+              </button>
+            </li>
+            <li>
+              <button type="button" class="mobile-menu__acct-item" role="menuitem" id="open-settings-m">
+                <svg class="account-menu__ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+                Configurações
+              </button>
+            </li>
+            <li class="admin-only" id="mobile-admin-li" hidden>
+              <a href="/admin" class="mobile-menu__acct-link" role="menuitem" id="open-admin-m">
+                <svg class="account-menu__ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M3 3v18h18"/>
+                  <path d="M18 17V9"/>
+                  <path d="M13 17V5"/>
+                  <path d="M8 17v-3"/>
+                </svg>
+                Monitorização (admin)
+              </a>
+            </li>
+            <li class="mobile-menu__acct-sep" role="separator"></li>
+            <li>
+              <button type="button" class="mobile-menu__acct-item mobile-menu__acct-item--logout" role="menuitem" id="logout-menu">Sair</button>
+            </li>
+          </ul>
+        </div>
+      </footer>
     </div>
   </div>
 
