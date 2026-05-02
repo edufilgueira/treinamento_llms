@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex" />
+  <title>Manutenção — Oráculo Kiaiá</title>
+  <style>
+    :root {
+      --bg: #212121;
+      --text: #ececec;
+      --muted: #9b9b9b;
+      --border: rgba(255, 255, 255, 0.12);
+      --card: rgba(255, 255, 255, 0.04);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    @media (max-width: 768px) {
+      html, body { background: #000; }
+    }
+    .wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .card {
+      max-width: 28rem;
+      width: 100%;
+      padding: 2rem 1.75rem;
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      background: var(--card);
+      text-align: center;
+    }
+    .icon {
+      width: 3rem;
+      height: 3rem;
+      margin: 0 auto 1.25rem;
+      opacity: 0.9;
+    }
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem;
+      letter-spacing: -0.02em;
+    }
+    p {
+      margin: 0;
+      font-size: 0.95rem;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+    .hint {
+      margin-top: 1.25rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    code {
+      font-size: 0.78em;
+      padding: 0.15em 0.4em;
+      border-radius: 0.35rem;
+      background: rgba(255, 255, 255, 0.08);
+      color: #cfcfcf;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <article class="card" role="status" aria-live="polite">
+      <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        <path d="M12 8v4" />
+        <path d="M12 16h.01" />
+      </svg>
+      <h1>Estamos em manutenção</h1>
+      <p>O serviço voltará em breve. Obrigado pela paciência.</p>
+      <p class="hint">Se precisares de API durante a janela, os pedidos recebem <code>503</code> até o servidor principal voltar a estar online.</p>
+    </article>
+  </div>
+</body>
+</html>

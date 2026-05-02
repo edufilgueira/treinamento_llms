@@ -9,6 +9,8 @@ scp root@HOST:/root/treinamento_llms/trein/outputs/lora_adapter.zip ./
 segundo plano
 nohup ./serve.sh > app.log 2>&1 &
 nohup ./server/serve.sh > app.log 2>&1 &
+nohup ./server/serve_maintenance.sh > app.log 2>&1 &
+
 
 ps aux | grep python
 
@@ -28,3 +30,9 @@ find ~ -type d -name ".venv"
 
 sudo apt update
 sudo apt install git -y
+
+# Manutenção: parar o Oráculo e servir só página 503 na mesma porta (8765).
+# cd ~/treinamento_llms
+# pkill -f serve_lora || true   # ou: systemctl stop oraculo  (se tiveres unit)
+# nohup python3 server/serve_maintenance.py --host 0.0.0.0 --port 8765 > maintenance.log 2>&1 &
+# Para voltar: kill do serve_maintenance ; voltar a nohup ./server/serve.sh ...

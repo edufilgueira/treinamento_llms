@@ -15,4 +15,5 @@ checkpoints/
 server/data/oraculo_users.db
 server/data/.session_secret
 .env
+tools/
 server/.env
