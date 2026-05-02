@@ -63,7 +63,8 @@ body.menu-open {
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border-subtle);
   flex-direction: column;
-  padding: 0.5rem 0.65rem;
+  /* Sem padding-right: a área de scroll (.session-list) vai até à borda; o conteúdo mantém o inset com regras abaixo. */
+  padding: 0.5rem 0 0.5rem 0.65rem;
   display: flex;
 }
 
@@ -93,6 +94,20 @@ body.menu-open {
   width: 18px;
   height: 18px;
   opacity: 0.85;
+}
+
+.sidebar .sidebar-new-chat {
+  width: auto;
+  margin-right: 0.65rem;
+}
+
+.sidebar .sessions-recent__label {
+  padding-right: 0.65rem;
+  box-sizing: border-box;
+}
+
+.sidebar .session-list__entry {
+  padding-right: calc(0.25rem + 0.65rem);
 }
 
 .sessions-recent {
