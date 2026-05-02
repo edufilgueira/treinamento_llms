@@ -1,62 +1,21 @@
-# llama.cpp + llama-server (GPU) com modelo GGUF embutido.
+# llama-server com CUDA — imagem oficial (sem compilar localmente).
+# https://github.com/ggerganov/llama.cpp/pkgs/container/llama.cpp
 #
-# Construir a partir da raiz do repositório (onde está tools/quantized_model/):
-#   docker build -f Dockerfile -t llama-qwen-server:latest .
-#   docker build -f docker/llama-cpp/Dockerfile -t llama-qwen-server:latest .
+# Construir na raiz do repo (contexto com tools/quantized_model/):
+#   docker build --platform linux/amd64 -f Dockerfile -t llama-qwen-server:latest .
 #
-# Se o build rebentar a meio (erro 2 no gmake / nvcc killed): memória insuficiente.
-# Usa menos jobs em paralelo:
-#   docker build -f Dockerfile --build-arg BUILD_JOBS=2 -t llama-qwen-server:latest .
-#
-# Executar (requer NVIDIA Container Toolkit na máquina host):
+# Runpod / GPU local:
 #   docker run --gpus all -p 8080:8080 llama-qwen-server:latest
 #
-# Trocar commit/branch do llama.cpp:
-#   docker build -f Dockerfile --build-arg LLAMA_CPP_REF=b5602 -t llama-qwen-server:latest .
+# Para fixar versão, troca a tag (ex. server-cuda12-b9002) no FROM — ver tags em GHCR.
 
-ARG CUDA_VERSION=12.4.1
+FROM ghcr.io/ggml-org/llama.cpp:server-cuda
 
-# --- build ---
-FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04 AS build
-
-ARG LLAMA_CPP_REF=master
-# Omissão 4: nvcc usa muita RAM; nproc em VPS grande causa OOM. Reduz para 2 se ainda falhar.
-ARG BUILD_JOBS=4
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git cmake build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /src
-RUN git clone --depth 1 --branch "${LLAMA_CPP_REF}" https://github.com/ggerganov/llama.cpp.git . \
-    || (git clone https://github.com/ggerganov/llama.cpp.git . \
-        && git checkout "${LLAMA_CPP_REF}")
-
-# Sem sufixo -real (mais compatível com CMake/CUDA do que 89-real;90-real em algumas imagens).
-RUN cmake -B build \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DLLAMA_BUILD_SERVER=ON \
-    -DGGML_CUDA=ON \
-    -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90"
-
-RUN cmake --build build -j "${BUILD_JOBS}"
-
-# --- runtime ---
-FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu22.04
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=build /src/build/bin/ /usr/local/bin/
-RUN ldconfig
+WORKDIR /models
 
 COPY tools/quantized_model/Qwen3-8B-F16-Q4_K_M.gguf /models/model.gguf
 
-ENV MODEL_PATH=/models/model.gguf
-ENV LLAMA_PORT=8080
-ENV LLAMA_CTX=8192
-
+# A imagem base já expõe llama-server em 8080 no HEALTHCHECK; mantemos 8080 (Oráculo usa 8080 por omissão).
 EXPOSE 8080
 
-ENTRYPOINT ["/bin/sh", "-c", "exec /usr/local/bin/llama-server -m \"$MODEL_PATH\" --host 0.0.0.0 --port \"${LLAMA_PORT}\" -c \"${LLAMA_CTX}\" --reasoning off --reasoning-budget 0"]
+CMD ["-m", "/models/model.gguf", "--host", "0.0.0.0", "--port", "8080", "-c", "8192", "--reasoning", "off", "--reasoning-budget", "0"]
