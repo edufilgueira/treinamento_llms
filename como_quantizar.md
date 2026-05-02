@@ -40,12 +40,13 @@ docker build --platform linux/amd64 -f Dockerfile -t llama-qwen-server:latest .
 ```bash
 # GPU
 docker build --platform linux/amd64 -f Dockerfile --build-arg LLAMA_BASE=server-cuda -t llama-qwen-server:cuda .
+docker run -d --name llama-qwen -p 8080:8080 --restart unless-stopped llama-qwen-server:cuda
 
 # CPU (VPS sem NVIDIA)
 docker build --platform linux/amd64 -f Dockerfile --build-arg LLAMA_BASE=server -t llama-qwen-server:cpu .
+docker run -d --name llama-qwen -p 8080:8080 --restart unless-stopped llama-qwen-server:cpu
 ```
 
-docker run -d --name llama-qwen -p 8080:8080 --restart unless-stopped llama-qwen-server:cpu
 
 
 ```bash
