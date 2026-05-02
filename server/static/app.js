@@ -782,9 +782,11 @@
   document.getElementById("logout-desk")?.addEventListener("click", doLogout);
   document.getElementById("logout-menu")?.addEventListener("click", doLogout);
 
-  /** Só aplica se o utilizador estiver perto do fim; ao subir para ler, o streaming deixa de puxar a vista. */
-  const LOG_BOTTOM_THRESHOLD_PX = 96;
+  /** Se o fundo está a menos disto que isto em px, considera-se seguir o stream até ao fundo — valor baixo para um deslize mínimo cortar follow. */
+  const LOG_BOTTOM_THRESHOLD_PX = 28;
   let logUserFollowingBottom = true;
+  /** Ignora handlers de scroll em efeitos de ``scrollTop`` impostos por JS para não repetir estado. */
+  let logSuppressScrollSemantics = false;
 
   function getScrollContainer() {
     return mainScrollEl || logEl;
@@ -794,13 +796,17 @@
     const el = getScrollContainer();
     if (!el) return true;
     const gap = el.scrollHeight - el.clientHeight - el.scrollTop;
-    return gap < LOG_BOTTOM_THRESHOLD_PX;
+    return gap <= LOG_BOTTOM_THRESHOLD_PX;
   }
 
   function scrollLog() {
     const el = getScrollContainer();
     if (!el) return;
+    logSuppressScrollSemantics = true;
     el.scrollTop = el.scrollHeight;
+    queueMicrotask(function () {
+      logSuppressScrollSemantics = false;
+    });
   }
 
   function scrollLogIfFollowing() {
@@ -809,16 +815,53 @@
     }
   }
 
-  (function attachLogScrollListener() {
+  (function attachLogScrollFollowSignals() {
     const el = getScrollContainer();
     if (!el) return;
+
     el.addEventListener(
       "scroll",
       function () {
+        if (logSuppressScrollSemantics) return;
         logUserFollowingBottom = isLogNearBottom();
       },
       { passive: true }
     );
+
+    /** Roda imediatamente para cima mesmo ligeira — pára seguir até voltar ao fim manualmente ou próximo envio. */
+    el.addEventListener(
+      "wheel",
+      function (e) {
+        var dy = e.deltaY;
+        if (e.deltaMode === 1) dy *= 16;
+        else if (e.deltaMode === 2) dy *= Math.max(el.clientHeight, 100);
+        if (dy < -1) logUserFollowingBottom = false;
+      },
+      { passive: true }
+    );
+
+    /* Telemóveis: primeiro deslizar que mover scrollTop suficiente também corta o follow. */
+    var touchAnchScrollTop = null;
+    el.addEventListener(
+      "touchstart",
+      function () {
+        touchAnchScrollTop = el.scrollTop;
+      },
+      { passive: true }
+    );
+    el.addEventListener(
+      "touchmove",
+      function () {
+        if (touchAnchScrollTop == null) return;
+        if (Math.abs(el.scrollTop - touchAnchScrollTop) > 3) logUserFollowingBottom = false;
+      },
+      { passive: true }
+    );
+    function clearTouchAnch() {
+      touchAnchScrollTop = null;
+    }
+    el.addEventListener("touchend", clearTouchAnch, { passive: true });
+    el.addEventListener("touchcancel", clearTouchAnch, { passive: true });
   })();
 
   const COPY_ICON_SVG =
@@ -1014,7 +1057,7 @@
     bindMessageTapToRevealCopy(stack, bubble);
     logInner.appendChild(stack);
     updateEmptyState();
-    scrollLog();
+    scrollLogIfFollowing();
     return { stack: stack, div: bubble, textEl: textEl, statsEl: statsEl };
   }
 
