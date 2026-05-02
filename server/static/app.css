@@ -175,7 +175,7 @@ body.menu-open {
   border-radius: 0;
   background: transparent;
   color: var(--text, #ececec);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   line-height: 1.25;
   padding: 0.4rem 0.1rem 0.4rem 0.1rem;
   padding-right: calc(0.12rem + var(--session-kebab-reserve, 0px));

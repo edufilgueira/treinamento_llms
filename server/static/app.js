@@ -1551,16 +1551,10 @@
 
   async function newChat() {
     if (sendBtn.dataset.busy === "1") return;
-    const r = await apiFetch("/api/sessions", { method: "POST" });
-    if (r.status === 401) {
-      window.location.href = "/login";
-      return;
-    }
-    if (!r.ok) return;
-    const j = await r.json();
-    currentSessionId = j.id;
+    currentSessionId = null;
     clearChat();
-    await loadSessionList();
+    renderSessionList();
+    void loadSessionList();
   }
 
   async function bootChats() {
@@ -1572,18 +1566,10 @@
     const j = await r.json();
     const sessions = j.sessions || [];
     if (sessions.length === 0) {
-      const cr = await apiFetch("/api/sessions", { method: "POST" });
-      if (cr.status === 401) {
-        window.location.href = "/login";
-        return;
-      }
-      if (!cr.ok) return;
-      const cj = await cr.json();
-      currentSessionId = cj.id;
-      lastSessions = [
-        { id: cj.id, title: cj.title, created_at: "", updated_at: "" },
-      ];
+      lastSessions = [];
+      currentSessionId = null;
       renderSessionList();
+      clearChat();
       return;
     }
     lastSessions = sessions;
