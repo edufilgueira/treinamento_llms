@@ -46,9 +46,9 @@ COPY --from=build /src/build/bin/ /usr/local/bin/
 RUN ldconfig
 
 # Modelo quantizado (contexto de build = raiz do     treinamento_llms)
-COPY tools/quantized_model/Qwen3-8B-F16-Q4_K_M.gguf /models/model.gguf
+COPY tools/quantized_model/Qwen3-8B-F16-Q4_K_M.gguf /models/Qwen3-8B-F16-Q4_K_M.gguf.gguf
 
-ENV MODEL_PATH=/models/model.gguf
+ENV MODEL_PATH=/models/Qwen3-8B-F16-Q4_K_M.gguf.gguf
 ENV LLAMA_PORT=8080
 ENV LLAMA_CTX=8192
 

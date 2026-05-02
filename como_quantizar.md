@@ -30,6 +30,23 @@ tail -f ~/treinamento_llms/tools/llama.cpp/llama.log
 
 
 
+### Build (na **raiz** do repo `treinamento_llms`)
+```bash
+docker build -f Dockerfile -t kiaia-server:latest .
+```
+
+Para a Runpod costuma ser `linux/amd64`:
+```bash
+docker build --platform linux/amd64 -f Dockerfile -t kiaia-server:latest .
+```
+
+### Run (8080 no host → 8080 no container)
+```bash
+docker run --gpus all -p 8080:8080 kiaia-server:latest
+```
+
+
+
 ```bash
 apt install zip -y
 # compactar no servidor
