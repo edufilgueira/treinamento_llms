@@ -33,11 +33,13 @@ tail -f ~/treinamento_llms/tools/llama.cpp/llama.log
 ### Build (na **raiz** do repo `treinamento_llms`)
 ```bash
 docker build -f Dockerfile -t kiaia-server:latest .
+docker build -f Dockerfile --build-arg BUILD_JOBS=2 -t kiaia-server:latest .
 ```
 
 Para a Runpod costuma ser `linux/amd64`:
 ```bash
 docker build --platform linux/amd64 -f Dockerfile -t kiaia-server:latest .
+
 ```
 
 ### Run (8080 no host → 8080 no container)

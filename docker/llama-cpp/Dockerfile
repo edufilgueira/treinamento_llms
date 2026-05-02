@@ -1,26 +1,12 @@
-# llama.cpp + llama-server (GPU) com modelo GGUF embutido.
+# Duplicado de /Dockerfile na raiz — mesmo contexto de build (. na raiz do repo).
 #
-# Construir a partir da raiz do repositório (onde está tools/quantized_model/):
-#   docker build -f Dockerfile -t llama-qwen-server:latest .
 #   docker build -f docker/llama-cpp/Dockerfile -t llama-qwen-server:latest .
-#
-# Se o build rebentar a meio (erro 2 no gmake / nvcc killed): memória insuficiente.
-# Usa menos jobs em paralelo:
-#   docker build -f Dockerfile --build-arg BUILD_JOBS=2 -t llama-qwen-server:latest .
-#
-# Executar (requer NVIDIA Container Toolkit na máquina host):
-#   docker run --gpus all -p 8080:8080 llama-qwen-server:latest
-#
-# Trocar commit/branch do llama.cpp:
-#   docker build -f Dockerfile --build-arg LLAMA_CPP_REF=b5602 -t llama-qwen-server:latest .
 
 ARG CUDA_VERSION=12.4.1
 
-# --- build ---
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04 AS build
 
 ARG LLAMA_CPP_REF=master
-# Omissão 4: nvcc usa muita RAM; nproc em VPS grande causa OOM. Reduz para 2 se ainda falhar.
 ARG BUILD_JOBS=4
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -32,7 +18,6 @@ RUN git clone --depth 1 --branch "${LLAMA_CPP_REF}" https://github.com/ggerganov
     || (git clone https://github.com/ggerganov/llama.cpp.git . \
         && git checkout "${LLAMA_CPP_REF}")
 
-# Sem sufixo -real (mais compatível com CMake/CUDA do que 89-real;90-real em algumas imagens).
 RUN cmake -B build \
     -DCMAKE_BUILD_TYPE=Release \
     -DLLAMA_BUILD_SERVER=ON \
@@ -41,7 +26,6 @@ RUN cmake -B build \
 
 RUN cmake --build build -j "${BUILD_JOBS}"
 
-# --- runtime ---
 FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu22.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
