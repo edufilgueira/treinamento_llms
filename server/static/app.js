@@ -1180,8 +1180,10 @@
         sp.className = "session-list__busy-spin";
         sp.setAttribute("role", "status");
         sp.setAttribute("aria-label", "A gerar resposta");
-        sp.innerHTML =
-          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5" stroke-opacity="0.22" stroke-width="2"/><path class="session-list__busy-spin-arc" d="M12 2.5a9.5 9.5 0 1 1-9.27 11.62" stroke-width="2"/></svg>';
+        const disk = document.createElement("span");
+        disk.className = "session-list__busy-disk";
+        disk.setAttribute("aria-hidden", "true");
+        sp.appendChild(disk);
         menu.appendChild(sp);
       } else {
         const kebab = document.createElement("button");
