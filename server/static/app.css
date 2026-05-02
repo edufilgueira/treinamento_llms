@@ -1093,7 +1093,7 @@ body.menu-open {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: 0.65rem 1rem 0;
+  padding: 0 1rem 0;
   isolation: isolate;
   background: var(--main-bg);
 }
