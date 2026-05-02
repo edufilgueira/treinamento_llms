@@ -297,6 +297,11 @@ body.menu-open {
   .session-list__menu.is-open .session-list__kebab {
     opacity: 1;
   }
+
+  .session-list__busy-spin svg {
+    opacity: 1;
+    color: #bfb39a;
+  }
 }
 
 .session-list__dropdown {
@@ -325,6 +330,51 @@ body.menu-open {
   visibility: visible;
   transform: translateY(0);
   pointer-events: auto;
+}
+
+/* Rodinha no mesmo sítio dos ⋯ enquanto há geração nessa sessão (pode ler outra conversa). */
+.session-list__menu.session-list__menu--busy {
+  opacity: 1;
+  pointer-events: none;
+}
+
+.session-list__busy-spin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  flex-shrink: 0;
+}
+
+.session-list__busy-spin svg {
+  display: block;
+  width: 1.12rem;
+  height: 1.12rem;
+  color: #a89b7a;
+  animation: session-list-spinner-rotate 0.72s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes session-list-spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.generation-detached-holder {
+  position: absolute !important;
+  inset: auto !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .session-list__dd-item {

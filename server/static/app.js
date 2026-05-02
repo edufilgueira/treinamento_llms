@@ -46,6 +46,13 @@
   /** Geração em background no servidor; cancelamento explícito via /cancel. */
   let currentJobId = null;
 
+  /** `.msg-stack` em streaming durante o job atual (detach ao trocar de sessão). */
+  let generationStackEl = null;
+  /** Sessão a que esse job pertence — spinner na lista lateral e reattach ao reabrir. */
+  let generationSidebarSid = null;
+  /** Contentor oculto para preservar bolha quando o utilizador navega para outra conversa. */
+  let generationDetachedHolder = null;
+
   let screenWakeLock = null;
 
   /** Bloco cuja ação “copiar” fica visível até outro botão copiar ser clicado. */
@@ -73,6 +80,52 @@
       streamAborter.abort();
       streamAborter = null;
     }
+  }
+
+  function ensureGenerationDetachedHolder() {
+    if (generationDetachedHolder) return generationDetachedHolder;
+    const el = document.createElement("div");
+    el.className = "generation-detached-holder";
+    el.hidden = true;
+    el.setAttribute("aria-hidden", "true");
+    document.body.appendChild(el);
+    generationDetachedHolder = el;
+    return el;
+  }
+
+  function detachGenerationBubbleFromChatIfNeeded() {
+    if (!generationStackEl || !logInner) return;
+    if (generationStackEl.parentNode === logInner) {
+      ensureGenerationDetachedHolder().appendChild(generationStackEl);
+    }
+  }
+
+  function disposeGenerationDetachedHolder() {
+    if (generationDetachedHolder) {
+      generationDetachedHolder.remove();
+      generationDetachedHolder = null;
+    }
+  }
+
+  function reattachGenerationBubbleToLogIfApplicable(targetSid) {
+    if (sendBtn.dataset.busy !== "1") return;
+    if (
+      generationSidebarSid == null ||
+      String(generationSidebarSid) !== String(targetSid) ||
+      !generationStackEl ||
+      !logInner
+    ) {
+      return;
+    }
+    if (generationStackEl.parentNode !== logInner) {
+      logInner.appendChild(generationStackEl);
+    }
+  }
+
+  function resetGenerationMarks() {
+    generationStackEl = null;
+    generationSidebarSid = null;
+    disposeGenerationDetachedHolder();
   }
 
   async function acquireScreenWakeLock() {
@@ -1115,37 +1168,52 @@
       btn.setAttribute("title", fullLabel);
       btn.setAttribute("aria-label", fullLabel);
       btn.textContent = fullLabel;
+      const showingGenSpinner =
+        generationSidebarSid != null &&
+        sendBtn.dataset.busy === "1" &&
+        String(generationSidebarSid) === String(s.id);
       const menu = document.createElement("div");
       menu.className = "session-list__menu";
-      const kebab = document.createElement("button");
-      kebab.type = "button";
-      kebab.className = "session-list__kebab";
-      kebab.setAttribute("aria-label", "Mais opções");
-      kebab.setAttribute("aria-haspopup", "true");
-      kebab.setAttribute("aria-expanded", "false");
-      kebab.appendChild(document.createTextNode("⋯"));
-      const dd = document.createElement("div");
-      dd.className = "session-list__dropdown";
-      dd.setAttribute("role", "menu");
-      const renameBtn = document.createElement("button");
-      renameBtn.type = "button";
-      renameBtn.className = "session-list__dd-item";
-      renameBtn.setAttribute("role", "menuitem");
-      renameBtn.dataset.action = "rename";
-      renameBtn.innerHTML =
-        '<svg class="session-list__dd-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg><span>Renomear</span>';
-      const removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "session-list__dd-item";
-      removeBtn.setAttribute("role", "menuitem");
-      removeBtn.setAttribute("aria-label", "Remover");
-      removeBtn.dataset.action = "remove";
-      removeBtn.innerHTML =
-        '<svg class="session-list__dd-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg><span>Remover</span>';
-      dd.appendChild(renameBtn);
-      dd.appendChild(removeBtn);
-      menu.appendChild(kebab);
-      menu.appendChild(dd);
+      if (showingGenSpinner) {
+        menu.classList.add("session-list__menu--busy");
+        const sp = document.createElement("span");
+        sp.className = "session-list__busy-spin";
+        sp.setAttribute("role", "status");
+        sp.setAttribute("aria-label", "A gerar resposta");
+        sp.innerHTML =
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5" stroke-opacity="0.22" stroke-width="2"/><path class="session-list__busy-spin-arc" d="M12 2.5a9.5 9.5 0 1 1-9.27 11.62" stroke-width="2"/></svg>';
+        menu.appendChild(sp);
+      } else {
+        const kebab = document.createElement("button");
+        kebab.type = "button";
+        kebab.className = "session-list__kebab";
+        kebab.setAttribute("aria-label", "Mais opções");
+        kebab.setAttribute("aria-haspopup", "true");
+        kebab.setAttribute("aria-expanded", "false");
+        kebab.appendChild(document.createTextNode("⋯"));
+        const dd = document.createElement("div");
+        dd.className = "session-list__dropdown";
+        dd.setAttribute("role", "menu");
+        const renameBtn = document.createElement("button");
+        renameBtn.type = "button";
+        renameBtn.className = "session-list__dd-item";
+        renameBtn.setAttribute("role", "menuitem");
+        renameBtn.dataset.action = "rename";
+        renameBtn.innerHTML =
+          '<svg class="session-list__dd-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg><span>Renomear</span>';
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "session-list__dd-item";
+        removeBtn.setAttribute("role", "menuitem");
+        removeBtn.setAttribute("aria-label", "Remover");
+        removeBtn.dataset.action = "remove";
+        removeBtn.innerHTML =
+          '<svg class="session-list__dd-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg><span>Remover</span>';
+        dd.appendChild(renameBtn);
+        dd.appendChild(removeBtn);
+        menu.appendChild(kebab);
+        menu.appendChild(dd);
+      }
       entry.appendChild(btn);
       entry.appendChild(menu);
       row.appendChild(entry);
@@ -1261,11 +1329,11 @@
   }
 
   async function openSession(sid, opts) {
-    if (sendBtn.dataset.busy === "1") return;
     if (String(sid) === String(currentSessionId) && !(opts && opts.fromBoot)) {
       closeMobileMenuIfOpen();
       return;
     }
+    detachGenerationBubbleFromChatIfNeeded();
     const r = await apiFetch("/api/sessions/" + encodeURIComponent(sid));
     if (r.status === 401) {
       window.location.href = "/login";
@@ -1297,6 +1365,7 @@
       }
     }
     updateEmptyState();
+    reattachGenerationBubbleToLogIfApplicable(currentSessionId);
     scrollLog();
     closeMobileMenuIfOpen();
     void loadSessionList();
@@ -1480,6 +1549,7 @@
     const text = inputEl.value.trim();
     if (!text) return;
     if (!(await ensureSession())) return;
+    const sessionIdForJob = currentSessionId;
     const ac = new AbortController();
     streamAborter = ac;
     const signal = ac.signal;
@@ -1496,7 +1566,14 @@
     sendBtn.dataset.busy = "1";
     updateSendState();
 
-    const { div: assistantDiv, textEl, statsEl } = appendAssistantStreaming();
+    const streamUi = appendAssistantStreaming();
+    const assistantDiv = streamUi.div;
+    const textEl = streamUi.textEl;
+    const statsEl = streamUi.statsEl;
+    generationStackEl = streamUi.stack;
+    generationSidebarSid = sessionIdForJob;
+    renderSessionList();
+
     let lastText = "";
     let endReason = "none";
     let lastJobState = null;
@@ -1510,7 +1587,7 @@
           max_new_tokens: 2048,
           temperature: 0.7,
           top_p: 0.9,
-          session_id: currentSessionId,
+          session_id: sessionIdForJob,
         }),
       });
       if (createRes.status === 401) {
@@ -1583,22 +1660,33 @@
         textEl.textContent = "Erro: " + e.message;
       }
     } finally {
+      const viewingJobSession =
+        sessionIdForJob != null && String(sessionIdForJob) === String(currentSessionId);
       if (endReason === "done") {
-        history.push({ role: "assistant", content: lastText });
+        if (viewingJobSession) {
+          history.push({ role: "assistant", content: lastText });
+        }
       } else if (endReason === "cancelled" || endReason === "abort") {
         if (lastText.trim().length) {
           renderMsgMarkdown(textEl, lastText);
-          history.push({ role: "assistant", content: lastText });
+          if (viewingJobSession) {
+            history.push({ role: "assistant", content: lastText });
+          }
         } else {
-          const stack = assistantDiv.closest && assistantDiv.closest(".msg-stack");
-          if (stack) {
-            stack.remove();
+          const stackRm = assistantDiv.closest && assistantDiv.closest(".msg-stack");
+          if (stackRm) {
+            stackRm.remove();
             updateEmptyState();
           }
         }
       }
       assistantDiv.classList.remove("streaming");
-      if (statsEl && lastJobState && logInner && logInner.contains(statsEl)) {
+      const statsMounted =
+        statsEl &&
+        lastJobState &&
+        ((logInner && logInner.contains(statsEl)) ||
+          (generationStackEl && generationStackEl.contains(statsEl)));
+      if (statsMounted) {
         setAssistantGenStats(statsEl, lastJobState);
       }
       currentJobId = null;
@@ -1606,6 +1694,7 @@
       if (streamAborter === ac) {
         streamAborter = null;
       }
+      resetGenerationMarks();
       delete sendBtn.dataset.busy;
       updateSendState();
       collapseComposerToSingleRow();
