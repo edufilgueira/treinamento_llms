@@ -247,6 +247,10 @@
   }
 
   const SWIPE_CLOSE_PX = 72;
+  /** Menu móvel: só fechar com swipe à esquerda após eixo horizontal ganhar ao vertical (evita lutar com o scroll da lista). */
+  const MM_SWIPE_AXIS_SLOP_PX = 14;
+  const MM_SWIPE_VERTICAL_DOMINANCE = 1.22;
+  const MM_SWIPE_HORIZONTAL_DOMINANCE = 1.12;
   const MEDIA_MOBILE = window.matchMedia("(max-width: 768px)");
   /** Coarse/touch UA: usar tap na bolha para mostrar Copiar (não há hover). */
   const MEDIA_HOVER_NONE =
@@ -462,16 +466,21 @@
   });
 
   let touchStartX = 0;
+  let touchStartY = 0;
   let touchLastX = 0;
   let dragOffset = 0;
+  /** null = ainda sem decisão; "v" = scroll vertical (não puxar painel); "h" = fechar com swipe à esquerda. */
+  let mmSwipeAxisLock = null;
 
   mobileMenuPanel.addEventListener(
     "touchstart",
     (e) => {
       if (!mobileMenu.classList.contains("is-open")) return;
       touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
       touchLastX = touchStartX;
       dragOffset = 0;
+      mmSwipeAxisLock = null;
       mobileMenuPanel.classList.add("is-dragging");
     },
     { passive: true }
@@ -481,13 +490,42 @@
     "touchmove",
     (e) => {
       if (!mobileMenu.classList.contains("is-open")) return;
-      const x = e.touches[0].clientX;
+      const t = e.touches[0];
+      const x = t.clientX;
+      const y = t.clientY;
       const dx = x - touchStartX;
+      const dy = y - touchStartY;
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
       touchLastX = x;
-      if (dx < 0) {
+
+      if (mmSwipeAxisLock === null) {
+        if (absDx < MM_SWIPE_AXIS_SLOP_PX && absDy < MM_SWIPE_AXIS_SLOP_PX) {
+          return;
+        }
+        if (absDy >= absDx * MM_SWIPE_VERTICAL_DOMINANCE) {
+          mmSwipeAxisLock = "v";
+        } else if (
+          dx < -MM_SWIPE_AXIS_SLOP_PX &&
+          absDx >= absDy * MM_SWIPE_HORIZONTAL_DOMINANCE
+        ) {
+          mmSwipeAxisLock = "h";
+        } else {
+          mmSwipeAxisLock = "v";
+        }
+      }
+
+      if (mmSwipeAxisLock === "v") {
+        return;
+      }
+
+      if (mmSwipeAxisLock === "h" && dx < 0) {
         dragOffset = dx;
         mobileMenuPanel.style.transform = "translateX(" + dx + "px)";
         e.preventDefault();
+      } else if (mmSwipeAxisLock === "h") {
+        dragOffset = 0;
+        mobileMenuPanel.style.transform = "";
       }
     },
     { passive: false }
@@ -498,10 +536,14 @@
     mobileMenuPanel.classList.remove("is-dragging");
     const releaseDx = touchLastX - touchStartX;
     mobileMenuPanel.style.transform = "";
-    if (dragOffset < -SWIPE_CLOSE_PX || releaseDx < -SWIPE_CLOSE_PX) {
+    if (
+      mmSwipeAxisLock === "h" &&
+      (dragOffset < -SWIPE_CLOSE_PX || releaseDx < -SWIPE_CLOSE_PX)
+    ) {
       closeMobileMenu();
     }
     dragOffset = 0;
+    mmSwipeAxisLock = null;
   });
 
   mobileMenuPanel.addEventListener("touchcancel", () => {
@@ -509,6 +551,7 @@
     mobileMenuPanel.classList.remove("is-dragging");
     mobileMenuPanel.style.transform = "";
     dragOffset = 0;
+    mmSwipeAxisLock = null;
   });
 
   menuToggle.addEventListener("click", toggleMobileMenu);
