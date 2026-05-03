@@ -31,23 +31,21 @@ tail -f ~/treinamento_llms/tools/llama.cpp/llama.log
 
 
 ### Build (na **raiz** do repo `treinamento_llms`)
-Para a Runpod costuma ser `linux/amd64`:
-```bash
-docker build --platform linux/amd64 -f Dockerfile -t llama-qwen-server:latest .
-```
 
-### Run (8080 no host → 8080 no container)
 ```bash
 # GPU
-docker build --platform linux/amd64 -f Dockerfile --build-arg LLAMA_BASE=server-cuda -t llama-qwen-server:cuda .
-docker run -d --name llama-qwen -p 8080:8080 --restart unless-stopped llama-qwen-server:cuda
+docker build --platform linux/amd64 -f Dockerfile --build-arg LLAMA_BASE=server-cuda -t kiaia-server:cuda .
+docker run -d --name llama-qwen -p 8080:8080 --restart unless-stopped kiaia-server:cuda
 
 # CPU (VPS sem NVIDIA)
-docker build --platform linux/amd64 -f Dockerfile --build-arg LLAMA_BASE=server -t llama-qwen-server:cpu .
-docker run -d --name llama-qwen -p 8080:8080 --restart unless-stopped llama-qwen-server:cpu
+docker build --platform linux/amd64 -f Dockerfile --build-arg LLAMA_BASE=server -t kiaia-server:cpu .
+docker run -d --name llama-qwen -p 8080:8080 --restart unless-stopped kiaia-server:cpu
+
+# Enviar para Docker Hub
+docker login -u edufilgueira
+docker tag kiaia-server:cuda edufilgueira/kiaia-server:cuda
+docker push edufilgueira/kiaia-server:cuda
 ```
-
-
 
 ```bash
 apt install zip -y

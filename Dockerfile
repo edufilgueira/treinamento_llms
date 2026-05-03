@@ -32,6 +32,6 @@ ENTRYPOINT ["/entry-llama.sh"]
 
 COPY tools/quantized_model/Qwen3-8B-F16-Q4_K_M.gguf /models/model.gguf
 
-EXPOSE 8080
+EXPOSE 80
 
-CMD ["-m", "/models/model.gguf", "--host", "0.0.0.0", "--port", "8080", "-c", "8192", "--reasoning", "off", "--reasoning-budget", "0"]
+CMD ["-m", "/models/model.gguf", "--host", "0.0.0.0", "--port", "80", "-c", "8192", "--reasoning", "off", "--reasoning-budget", "0"]
