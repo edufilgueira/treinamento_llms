@@ -1,5 +1,8 @@
 """
-Runpod Serverless: um llama-server (CUDA) por worker; o handler só faz HTTP local.
+Runpod Serverless: um llama-server (CUDA) por worker; o handler faz HTTP local.
+
+**Streaming:** o handler é um gerador: faz SSE para o llama-server (`stream: true`) e faz
+`yield` de cada delta de texto. O cliente Oráculo consome `GET .../stream/{job_id}` na API Runpod.
 
 Modelo: carrega uma vez no arranque do llama-server (não por pedido).
 
@@ -7,8 +10,7 @@ Modelo: carrega uma vez no arranque do llama-server (não por pedido).
 Relação com o admin do Oráculo (PostgreSQL / app_global)
 
 Este worker NÃO lê a base de dados do Oráculo. Definições como llama_max_new_tokens,
-llama_temperature e llama_top_p (ver server/db/auth_db.get_llama_server_settings) só
-se aplicam aqui se:
+llama_temperature e llama_top_p só se aplicam aqui se:
 
 1) Configurares no painel Runpod as ENV abaixo (DEFAULT_*) com os mesmos valores
    que vês no admin (cópia manual ao criar/atualizar o endpoint), ou
@@ -22,9 +24,11 @@ Por omissão usamos ENV alinhadas aos defaults do admin (2048 / 0.8 / 0.9).
 from __future__ import annotations
 
 import atexit
+import json
 import os
 import subprocess
 import time
+from collections.abc import Iterator
 from typing import Any
 
 import httpx
@@ -35,9 +39,8 @@ MODEL_PATH = os.environ.get("MODEL_PATH", "/models/model.gguf")
 LLAMA_CTX = os.environ.get("LLAMA_CTX", "8192")
 N_GPU_LAYERS = os.environ.get("N_GPU_LAYERS", "99")
 
-# Espelho opcional do admin (app_global); ajusta no Runpod «Environment».
-DEFAULT_MAX_NEW_TOKENS = int(os.environ.get("DEFAULT_MAX_NEW_TOKENS", "2048"))
-DEFAULT_TEMPERATURE = float(os.environ.get("DEFAULT_TEMPERATURE", "0.8"))
+DEFAULT_MAX_NEW_TOKENS = int(os.environ.get("DEFAULT_MAX_NEW_TOKENS", "4096"))
+DEFAULT_TEMPERATURE = float(os.environ.get("DEFAULT_TEMPERATURE", "0.3"))
 DEFAULT_TOP_P = float(os.environ.get("DEFAULT_TOP_P", "0.9"))
 
 _server_proc: subprocess.Popen[bytes] | None = None
@@ -97,7 +100,7 @@ def _shutdown_server() -> None:
         _server_proc.kill()
 
 
-def _wait_ready(timeout_s: float = 900.0) -> None:
+def _wait_ready(timeout_s: float = 300.0) -> None:
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         if _server_responds():
@@ -127,7 +130,7 @@ def _num_i(v: Any, default: int) -> int:
 def _build_messages(inp: dict[str, Any], user_text: str) -> list[dict[str, Any]]:
     raw = inp.get("messages")
     if isinstance(raw, list) and len(raw) > 0:
-        return raw  # confiar no emissor (ex. Oráculo com histórico)
+        return raw
     out: list[dict[str, Any]] = []
     sys_t = inp.get("system")
     if isinstance(sys_t, str) and sys_t.strip():
@@ -136,8 +139,61 @@ def _build_messages(inp: dict[str, Any], user_text: str) -> list[dict[str, Any]]
     return out
 
 
-def handler(event: dict[str, Any]) -> dict[str, Any]:
-    inp = event.get("input") or {}
+def _iter_llama_chat_sse(
+    messages: list[dict[str, Any]],
+    max_tokens: int,
+    temperature: float,
+    top_p: float,
+) -> Iterator[str]:
+    """OpenAI-compatible SSE from local llama-server; yields `content` deltas (tokens/pieces)."""
+    payload: dict[str, Any] = {
+        "model": "local",
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "top_p": top_p,
+        "stream": True,
+    }
+    url = f"http://127.0.0.1:{LLAMA_PORT}/v1/chat/completions"
+    headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
+    with httpx.Client(timeout=httpx.Timeout(600.0, connect=30.0)) as client:
+        with client.stream("POST", url, json=payload, headers=headers) as r:
+            r.raise_for_status()
+            for line in r.iter_lines():
+                if not line:
+                    continue
+                if line.startswith("data: "):
+                    data = line[6:].strip()
+                elif line.startswith("data:"):
+                    data = line[5:].strip()
+                else:
+                    continue
+                if data == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                if "error" in chunk:
+                    err = chunk["error"]
+                    msg = (
+                        err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                    )
+                    raise RuntimeError(msg)
+                chs = chunk.get("choices") or []
+                if not chs:
+                    continue
+                delta = (chs[0].get("delta") or {}) if isinstance(chs[0], dict) else {}
+                piece = delta.get("content")
+                if piece:
+                    yield str(piece)
+
+
+def handler(job: dict[str, Any]) -> Iterator[str]:
+    """
+    Streaming handler: repassa deltas do llama-server para o Runpod `/stream/{job_id}`.
+    """
+    inp = job.get("input") or {}
     raw_msgs = inp.get("messages")
     prompt = inp.get("prompt")
 
@@ -146,35 +202,19 @@ def handler(event: dict[str, Any]) -> dict[str, Any]:
     elif isinstance(prompt, str) and prompt.strip():
         messages = _build_messages(inp, prompt)
     else:
-        return {"error": "missing_input_prompt_or_messages", "output": None}
+        raise ValueError("missing_input_prompt_or_messages")
 
     max_tokens = _num_i(inp.get("max_tokens"), DEFAULT_MAX_NEW_TOKENS)
     temperature = _num(inp.get("temperature"), DEFAULT_TEMPERATURE)
     top_p = _num(inp.get("top_p"), DEFAULT_TOP_P)
 
-    payload: dict[str, Any] = {
-        "model": "local",
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "top_p": top_p,
-        "stream": False,
-    }
-    url = f"http://127.0.0.1:{LLAMA_PORT}/v1/chat/completions"
-    try:
-        r = httpx.post(
-            url,
-            json=payload,
-            timeout=httpx.Timeout(600.0, connect=30.0),
-        )
-        r.raise_for_status()
-        data = r.json()
-        text = data["choices"][0]["message"]["content"]
-    except Exception as e:
-        return {"error": str(e), "output": None}
-
-    return {"output": text}
+    yield from _iter_llama_chat_sse(messages, max_tokens, temperature, top_p)
 
 
 if __name__ == "__main__":
-    runpod.serverless.start({"handler": handler})
+    runpod.serverless.start(
+        {
+            "handler": handler,
+            "return_aggregate_stream": True,
+        }
+    )
