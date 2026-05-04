@@ -1,37 +1,36 @@
-# Imagem oficial ggml-org (sem compilar). Base = --build-arg LLAMA_BASE
-# https://github.com/ggml-org/llama.cpp/pkgs/container/llama.cpp
+# Runpod Serverless: Python chama llama-server (CUDA) uma vez por worker; handler = HTTP local.
+# Base: https://github.com/ggml-org/llama.cpp/pkgs/container/llama.cpp
 #
-# GPU (Runpod, host com NVIDIA + nvidia-container-toolkit):
-#   docker build --platform linux/amd64 -f Dockerfile --build-arg LLAMA_BASE=server-cuda -t llama-qwen-server:cuda .
-#   # Se .so em falta: --build-arg LLAMA_BASE=full-cuda
-#   docker run -d --name llama-qwen --gpus all -p 8080:8080 --restart unless-stopped llama-qwen-server:cuda
+# Build (linux/amd64 para Runpod):
+#   docker build --platform linux/amd64 -f Dockerfile -t SEU_USER/llama-qwen-runpod:latest .
+#   docker push SEU_USER/llama-qwen-runpod:latest
 #
-# CPU (VPS): `full` usa tools.sh — precisa de `--server` antes de `-m` (entrypoint /entry-llama.sh).
-#   docker build --platform linux/amd64 -f Dockerfile --build-arg LLAMA_BASE=full -t llama-qwen-server:cpu .
-#   docker rm -f llama-qwen && docker run -d --name llama-qwen -p 8080:8080 --restart unless-stopped llama-qwen-server:cpu
-#
-# Push p.ex. Docker Hub:
-#   docker tag llama-qwen-server:cpu USER/llama-qwen-server:cpu && docker push USER/llama-qwen-server:cpu
-#
-# Omissão = server-cuda (GPU).
+# Variáveis no Runpod (Environment):
+#   MODEL_PATH, LLAMA_PORT, LLAMA_CTX, N_GPU_LAYERS
+#   DEFAULT_MAX_NEW_TOKENS, DEFAULT_TEMPERATURE, DEFAULT_TOP_P — espelhar app_global do admin Oráculo (não há ligação automática à BD).
 
-ARG LLAMA_BASE=server-cuda
-FROM ghcr.io/ggml-org/llama.cpp:${LLAMA_BASE}
+FROM ghcr.io/ggml-org/llama.cpp:server-cuda
 
 WORKDIR /app
-ENV LD_LIBRARY_PATH=/app:/app/lib
 
-RUN printf '%s\n' \
-    '#!/bin/sh' \
-    'set -e' \
-    'if [ -f /app/tools.sh ]; then exec /usr/bin/env bash /app/tools.sh --server "$@"; fi' \
-    'exec /app/llama-server "$@"' \
-    > /entry-llama.sh && chmod +x /entry-llama.sh
+ENV DEBIAN_FRONTEND=noninteractive
+ENV MODEL_PATH=/models/model.gguf
+ENV LLAMA_PORT=8080
+ENV LLAMA_CTX=8192
+ENV N_GPU_LAYERS=99
+# Omissões do handler quando o input Runpod não manda max_tokens / temperature / top_p (alinhado a server/db/auth_db omissões admin).
+ENV DEFAULT_MAX_NEW_TOKENS=2048
+ENV DEFAULT_TEMPERATURE=0.8
+ENV DEFAULT_TOP_P=0.9
 
-ENTRYPOINT ["/entry-llama.sh"]
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-pip \
+    && rm -rf /var/lib/apt/lists/*
 
+RUN pip install --no-cache-dir --break-system-packages runpod httpx
+
+COPY handler.py /app/handler.py
 COPY tools/quantized_model/Qwen3-8B-F16-Q4_K_M.gguf /models/model.gguf
 
-EXPOSE 80
-
-CMD ["-m", "/models/model.gguf", "--host", "0.0.0.0", "--port", "80", "-c", "8192", "--reasoning", "off", "--reasoning-budget", "0"]
+# -u: logs sem buffer (melhor no Runpod).
+CMD ["python3", "-u", "/app/handler.py"]
