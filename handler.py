@@ -148,6 +148,10 @@ def handler(event: dict[str, Any]) -> dict[str, Any]:
     else:
         return {"error": "missing_input_prompt_or_messages", "output": None}
 
+    max_tokens = _num_i(inp.get("max_tokens"), DEFAULT_MAX_NEW_TOKENS)
+    temperature = _num(inp.get("temperature"), DEFAULT_TEMPERATURE)
+    top_p = _num(inp.get("top_p"), DEFAULT_TOP_P)
+
     payload: dict[str, Any] = {
         "model": "local",
         "messages": messages,

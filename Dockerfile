@@ -32,5 +32,9 @@ RUN pip install --no-cache-dir --break-system-packages runpod httpx
 COPY handler.py /app/handler.py
 COPY tools/quantized_model/Qwen3-8B-F16-Q4_K_M.gguf /models/model.gguf
 
+# A imagem base (llama.cpp:server-cuda) define ENTRYPOINT = llama-server; sem isto o CMD
+# passa a ser argumentos do binário → "error: invalid argument: python3".
+ENTRYPOINT []
+
 # -u: logs sem buffer (melhor no Runpod).
 CMD ["python3", "-u", "/app/handler.py"]
