@@ -8,11 +8,11 @@ python3 server_for_serveless/serve_lora.py
 # ou: ./server_for_serveless/serve.sh
 ```
 
-**Runpod:** `ORACULO_RUNPOD_ENDPOINT_ID` + `ORACULO_RUNPOD_API_KEY` em `server_for_serveless/.env` (ver `.env.example` nesta pasta). Arquitetura, fluxo da API e workers: **[README_RUNPOD_SERVERLESS.md](README_RUNPOD_SERVERLESS.md)**. Sem essas variáveis, usa-se llama-server HTTP como no projeto original.
+**Runpod:** activa **Runpod Serverless** nas *Configurações do modelo* (admin) e preenche endpoint + API key (ou deixa na BD vazio e usa `ORACULO_RUNPOD_*` aqui como fall-back). Desligado = llama-server HTTP. Ver **[README_RUNPOD_SERVERLESS.md](README_RUNPOD_SERVERLESS.md)**.
 
 ---
 
-Este diretório contém o **servidor HTTP** (FastAPI) que delega inferência ao **llama-server** ou ao **Runpod Serverless**; não carrega `.gguf` no processo Python.
+Este diretório contém o **servidor HTTP** (FastAPI) que delega inferência ao **llama-server** ou ao **Runpod Serverless** conforme a configuração global do admin; não carrega `.gguf` no processo Python.
 
 ## Variáveis de ambiente (PostgreSQL, etc.)
 
@@ -37,7 +37,7 @@ Copia `server_for_serveless/.env.example` para **`server_for_serveless/.env`** (
 
 1. **Raiz do projeto** — pasta que contém `server_for_serveless/`, com `server_for_serveless/requirements.txt`.
 
-2. **Inferência** — ou **llama-server** noutro host (URL no `.env` / admin), ou **Runpod** (`ORACULO_RUNPOD_*`). Se não definires URL e não usares Runpod, usa-se **`http://127.0.0.1:8080`** (exceto com `ORACULO_LLAMA_CPP_REQUIRE_EXPLICIT_URL=1`).
+2. **Inferência** — **Runpod:** activar no admin e configurar na UI (ou `.env` como fall-back). **Llama local/remoto:** desactivar Runpod no admin; host/porta ou `ORACULO_LLAMA_CPP_BASE_URL`.
 
 3. **Dependências** — na raiz do projeto:
 

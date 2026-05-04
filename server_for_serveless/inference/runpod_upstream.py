@@ -110,6 +110,7 @@ def iter_runpod_chat_stream(
     temperature: float,
     top_p: float,
     cancel_event: threading.Event | None = None,
+    poll_timeout_s: float | None = None,
 ) -> Iterator[str]:
     """
     Submete ``POST /run`` e lê deltas de texto via ``GET /stream/{job_id}``.
@@ -130,7 +131,9 @@ def iter_runpod_chat_stream(
     }
 
     read_timeout = float(
-        (os.environ.get("ORACULO_RUNPOD_POLL_TIMEOUT_S") or "").strip()
+        poll_timeout_s
+        if poll_timeout_s is not None and float(poll_timeout_s) > 0
+        else (os.environ.get("ORACULO_RUNPOD_POLL_TIMEOUT_S") or "").strip()
         or DEFAULT_POLL_TIMEOUT_S
     )
     run_url = f"{API_BASE}/{eid}/run"
@@ -206,6 +209,8 @@ def runpod_chat_complete(
     max_tokens: int,
     temperature: float,
     top_p: float,
+    poll_timeout_s: float | None = None,
+    poll_interval_s: float | None = None,
 ) -> tuple[str, dict[str, int] | None]:
     """
     Executa uma geração vía Runpod e devolve (texto, usage|None).
@@ -225,11 +230,15 @@ def runpod_chat_complete(
     }
 
     timeout_s = float(
-        (os.environ.get("ORACULO_RUNPOD_POLL_TIMEOUT_S") or "").strip()
+        poll_timeout_s
+        if poll_timeout_s is not None and float(poll_timeout_s) > 0
+        else (os.environ.get("ORACULO_RUNPOD_POLL_TIMEOUT_S") or "").strip()
         or DEFAULT_POLL_TIMEOUT_S
     )
     interval = float(
-        (os.environ.get("ORACULO_RUNPOD_POLL_INTERVAL_S") or "").strip()
+        poll_interval_s
+        if poll_interval_s is not None and float(poll_interval_s) > 0
+        else (os.environ.get("ORACULO_RUNPOD_POLL_INTERVAL_S") or "").strip()
         or DEFAULT_POLL_INTERVAL_S
     )
 
@@ -275,7 +284,7 @@ def runpod_chat_complete(
 
     raise TimeoutError(
         f"Timeout ({timeout_s}s) à espera do job Runpod {job_id!r}. "
-        "Aumenta ORACULO_RUNPOD_POLL_TIMEOUT_S se precisares de gerações mais longas."
+        "Aumenta o tempo máx. nas configurações Runpod (admin) ou ORACULO_RUNPOD_POLL_TIMEOUT_S."
     )
 
 

@@ -20,6 +20,7 @@ from server_for_serveless.db.auth_db import (
     get_global_runtime_prefs,
     get_global_system_prompt,
     get_llama_server_settings,
+    get_runpod_server_settings,
     get_user_model_settings,
     get_user_names,
     is_user_admin,
@@ -27,6 +28,7 @@ from server_for_serveless.db.auth_db import (
     set_global_runtime_prefs,
     set_global_system_prompt,
     set_llama_server_settings,
+    set_runpod_server_settings,
     set_user_display_name,
     set_user_email,
     set_user_model_settings,
@@ -46,6 +48,7 @@ from server_for_serveless.db.chat_sessions_db import (
     set_session_title_user,
     should_generate_title,
 )
+from server_for_serveless.inference.bootstrap import load_inference_backend
 from server_for_serveless.inference.runtime import (
     cross_user_ui_block_enabled,
     get_runtime,
@@ -60,6 +63,7 @@ from server_for_serveless.schemas.web import (
     JobCreateOut,
     JobStateOut,
     LlamaServerSettingsOut,
+    RunpodServerSettingsOut,
     SessionTitleUpdate,
     UserModelSettingsIn,
     UserModelSettingsOut,
@@ -140,8 +144,8 @@ def _user_settings_out(uid: int) -> UserModelSettingsOut:
     llama_out: LlamaServerSettingsOut | None = None
     if admin:
         ls = get_llama_server_settings()
+        rs = get_runpod_server_settings()
         llama_out = LlamaServerSettingsOut(
-            upstream_enabled=bool(ls["upstream_enabled"]),
             api_host=str(ls["api_host"]),
             api_port=int(ls["api_port"]),
             n_ctx=int(ls["n_ctx"]),
@@ -153,6 +157,15 @@ def _user_settings_out(uid: int) -> UserModelSettingsOut:
             reasoning=str(ls["reasoning"]),
             reasoning_budget=int(ls["reasoning_budget"]),
         )
+        runpod_out = RunpodServerSettingsOut(
+            serverless_enabled=bool(rs["serverless_enabled"]),
+            endpoint_id=str(rs["endpoint_id"]),
+            api_key=str(rs["api_key"]),
+            model_id=str(rs["model_id"]),
+            poll_timeout_s=int(rs["poll_timeout_s"]),
+            poll_interval_s=int(rs["poll_interval_s"]),
+            startup_health=bool(rs["startup_health"]),
+        )
         return UserModelSettingsOut(
             is_admin=True,
             system_prompt=s["system_prompt"],
@@ -161,6 +174,7 @@ def _user_settings_out(uid: int) -> UserModelSettingsOut:
             temperature=float(ls["temperature"]),
             top_p=float(ls["top_p"]),
             llama_server=llama_out,
+            runpod_server=runpod_out,
             **gp,
         )
     rt = get_runtime()
@@ -174,6 +188,7 @@ def _user_settings_out(uid: int) -> UserModelSettingsOut:
             temperature=float(ls["temperature"]),
             top_p=float(ls["top_p"]),
             llama_server=None,
+            runpod_server=None,
             **gp,
         )
     return UserModelSettingsOut(
@@ -184,6 +199,7 @@ def _user_settings_out(uid: int) -> UserModelSettingsOut:
         temperature=DEFAULT_TEMP,
         top_p=DEFAULT_TOP_P,
         llama_server=None,
+        runpod_server=None,
         **gp,
     )
 
@@ -506,6 +522,25 @@ async def user_patch_settings(_uid: UserIdDep, body: UserModelSettingsIn):
                     set_llama_server_settings(**patch)
                 except ValueError as err:
                     raise HTTPException(status_code=400, detail=str(err)) from err
+                rt0 = get_runtime()
+                if not rt0.ui_only:
+                    try:
+                        load_inference_backend(rt0)
+                    except Exception as err:
+                        raise HTTPException(status_code=400, detail=str(err)) from err
+        if body.runpod is not None:
+            patch_r = body.runpod.model_dump(exclude_unset=True)
+            if patch_r:
+                try:
+                    set_runpod_server_settings(**patch_r)
+                except ValueError as err:
+                    raise HTTPException(status_code=400, detail=str(err)) from err
+                rt1 = get_runtime()
+                if not rt1.ui_only:
+                    try:
+                        load_inference_backend(rt1)
+                    except Exception as err:
+                        raise HTTPException(status_code=400, detail=str(err)) from err
         runtime_touch = (
             body.inference_single_flight is not None
             or body.ui_block_cross_user_generation is not None

@@ -13,7 +13,7 @@ import psycopg2
 
 from server_for_serveless.api.v1 import openai_router
 from server_for_serveless.api.web import web_router
-from server_for_serveless.db.auth_db import get_global_runtime_prefs, init_db, llama_upstream_base_url_from_db
+from server_for_serveless.db.auth_db import get_global_runtime_prefs, init_db
 from server_for_serveless.db.pg_db import get_pg_dsn_dict
 from server_for_serveless.inference.bootstrap import load_inference_backend
 from server_for_serveless.inference.runtime import (
@@ -73,24 +73,6 @@ def parse_args() -> argparse.Namespace:
     if v in ("1", "true", "yes", "on"):
         args.ui_only = True
     return args
-
-
-_DEFAULT_LLAMA_UPSTREAM = "http://127.0.0.1:8080"
-
-
-def _llama_cpp_upstream_from_env() -> tuple[str | None, str]:
-    """
-    (url, origem_para_log). Sem ORACULO_LLAMA_CPP_BASE_URL usa-se 127.0.0.1:8080
-    (llama-server na mesma máquina), excepto se ORACULO_LLAMA_CPP_REQUIRE_EXPLICIT_URL=1.
-    """
-    v = (os.environ.get("ORACULO_LLAMA_CPP_BASE_URL") or "").strip().rstrip("/")
-    if v:
-        return v, ".env ORACULO_LLAMA_CPP_BASE_URL"
-    strict = (os.environ.get("ORACULO_LLAMA_CPP_REQUIRE_EXPLICIT_URL") or "").strip().lower()
-    if strict in ("1", "true", "yes", "on"):
-        return None, ""
-    d = _DEFAULT_LLAMA_UPSTREAM.rstrip("/")
-    return d, f"omissão {d!r} (defina ORACULO_LLAMA_CPP_BASE_URL se o llama-server for noutro host/porta)"
 
 
 def _openai_key_configured() -> bool:
@@ -184,12 +166,8 @@ async def lifespan(app: FastAPI):
         )
         print(f"  Endpoint: {eid!r} — model id (API): {rt.model_id!r}", flush=True)
     else:
-        db_upstream = llama_upstream_base_url_from_db()
-        env_upstream, env_src = _llama_cpp_upstream_from_env()
-        upstream = db_upstream or env_upstream
-        src = "base de dados (admin)" if db_upstream else env_src
         print(
-            f"Modo llama-server ({src}): delegação de inferência para {(upstream or '')!r}…",
+            f"Modo llama-server: delegação de inferência para {(rt.upstream_base or '')!r}…",
             flush=True,
         )
         print(f"  Modelo remoto (id na API): {rt.model_id!r}", flush=True)

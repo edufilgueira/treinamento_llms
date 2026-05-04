@@ -56,7 +56,6 @@ class UserProfileUpdate(BaseModel):
 
 
 class LlamaServerSettingsIn(BaseModel):
-    upstream_enabled: bool | None = None
     api_host: str | None = Field(None, max_length=256)
     api_port: int | None = Field(None, ge=1, le=65535)
     n_ctx: int | None = Field(None, ge=256, le=1_000_000)
@@ -80,7 +79,6 @@ class LlamaServerSettingsIn(BaseModel):
 
 
 class LlamaServerSettingsOut(BaseModel):
-    upstream_enabled: bool
     api_host: str
     api_port: int
     n_ctx: int
@@ -93,6 +91,26 @@ class LlamaServerSettingsOut(BaseModel):
     reasoning_budget: int
 
 
+class RunpodServerSettingsIn(BaseModel):
+    serverless_enabled: bool | None = None
+    endpoint_id: str | None = Field(None, max_length=512)
+    api_key: str | None = Field(None, max_length=1024)  # vazio no PATCH = não alterar
+    model_id: str | None = Field(None, max_length=128)
+    poll_timeout_s: int | None = Field(None, ge=30, le=86_400)
+    poll_interval_s: int | None = Field(None, ge=1, le=120)
+    startup_health: bool | None = None
+
+
+class RunpodServerSettingsOut(BaseModel):
+    serverless_enabled: bool
+    endpoint_id: str
+    api_key: str
+    model_id: str
+    poll_timeout_s: int
+    poll_interval_s: int
+    startup_health: bool
+
+
 class UserModelSettingsIn(BaseModel):
     system_prompt: str | None = None
     global_system_prompt: str | None = None
@@ -101,6 +119,7 @@ class UserModelSettingsIn(BaseModel):
     temperature: float | None = Field(None, ge=0.01, le=2.0)
     top_p: float | None = Field(None, ge=0.05, le=1.0)
     llama: LlamaServerSettingsIn | None = None
+    runpod: RunpodServerSettingsIn | None = None
     inference_single_flight: bool | None = None
     ui_block_cross_user_generation: bool | None = None
     ui_only: bool | None = None
@@ -114,6 +133,7 @@ class UserModelSettingsOut(BaseModel):
     temperature: float
     top_p: float
     llama_server: LlamaServerSettingsOut | None = None
+    runpod_server: RunpodServerSettingsOut | None = None
     inference_single_flight: bool
     ui_block_cross_user_generation: bool
     ui_only: bool

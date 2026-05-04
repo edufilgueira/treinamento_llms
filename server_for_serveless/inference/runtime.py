@@ -4,7 +4,6 @@ Runtime único: inferência vía llama-server HTTP local/remoto ou Runpod Server
 
 from __future__ import annotations
 
-import os
 import threading
 from contextlib import contextmanager
 from typing import Any, Iterator
@@ -45,6 +44,8 @@ class ModelRuntime:
         self._upstream_api_key: str = ""
         self._runpod_endpoint_id: str = ""
         self._runpod_api_key: str = ""
+        self._runpod_poll_timeout_s: float = 900.0
+        self._runpod_poll_interval_s: float = 1.0
         self.ui_only: bool = False
         self.inference_single_flight: bool = True
         self.ui_block_cross_user_generation: bool = True
@@ -135,6 +136,8 @@ class ModelRuntime:
         self._upstream_api_key = ""
         self._runpod_endpoint_id = ""
         self._runpod_api_key = ""
+        self._runpod_poll_timeout_s = 900.0
+        self._runpod_poll_interval_s = 1.0
         self._backend = ""
         self._mode = ""
         self._model_id = ""
@@ -171,33 +174,34 @@ class ModelRuntime:
         *,
         api_key: str | None,
         model_id: str | None = None,
+        poll_timeout_s: float | None = None,
+        poll_interval_s: float | None = None,
+        startup_health: bool = False,
     ) -> None:
         """Delegação ao worker Serverless (handler compatível com messages/max_tokens/…)."""
-        from .runpod_upstream import runpod_endpoint_health
+        from .runpod_upstream import DEFAULT_POLL_INTERVAL_S, DEFAULT_POLL_TIMEOUT_S, runpod_endpoint_health
 
         self.ui_only = False
         self._upstream_base = None
         self._upstream_api_key = ""
         eid = (endpoint_id or "").strip()
         if not eid:
-            raise ValueError("ORACULO_RUNPOD_ENDPOINT_ID vazio.")
+            raise ValueError("Runpod: endpoint id vazio.")
         key = (api_key or "").strip()
         if not key:
-            raise ValueError("ORACULO_RUNPOD_API_KEY obrigatório com endpoint Runpod.")
+            raise ValueError("Runpod: API key obrigatória.")
         self._runpod_endpoint_id = eid
         self._runpod_api_key = key
-        self._model_id = (model_id or "").strip() or (
-            (os.environ.get("ORACULO_RUNPOD_MODEL_ID") or "runpod").strip()
+        self._runpod_poll_timeout_s = float(
+            poll_timeout_s if poll_timeout_s is not None and float(poll_timeout_s) > 0 else DEFAULT_POLL_TIMEOUT_S
         )
+        self._runpod_poll_interval_s = float(
+            poll_interval_s if poll_interval_s is not None and float(poll_interval_s) > 0 else DEFAULT_POLL_INTERVAL_S
+        )
+        self._model_id = (model_id or "").strip() or "runpod"
         self._backend = "runpod"
         self._mode = "runpod"
-        # Falha cedo se o endpoint / chave estiverem errados (consulta opcional).
-        if (os.environ.get("ORACULO_RUNPOD_STARTUP_HEALTH", "").strip().lower() in (
-            "1",
-            "true",
-            "yes",
-            "on",
-        )):
+        if startup_health:
             runpod_endpoint_health(eid, key)
 
     def upstream_api_key(self) -> str | None:
@@ -208,6 +212,8 @@ class ModelRuntime:
         self._upstream_api_key = ""
         self._runpod_endpoint_id = ""
         self._runpod_api_key = ""
+        self._runpod_poll_timeout_s = 900.0
+        self._runpod_poll_interval_s = 1.0
         self._backend = ""
         self._mode = ""
         self._model_id = ""
@@ -289,6 +295,8 @@ class ModelRuntime:
                     max_tokens=mnt_eff,
                     temperature=temperature,
                     top_p=top_p,
+                    poll_timeout_s=self._runpod_poll_timeout_s,
+                    poll_interval_s=self._runpod_poll_interval_s,
                 )
             else:
                 if not self._upstream_base:
@@ -354,6 +362,7 @@ class ModelRuntime:
                     temperature=temperature,
                     top_p=top_p,
                     cancel_event=cancel_event,
+                    poll_timeout_s=self._runpod_poll_timeout_s,
                 ):
                     acc += delta
                     yield delta

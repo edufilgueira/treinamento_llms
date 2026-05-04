@@ -39,12 +39,12 @@ flowchart LR
 
 ## 2. Como o projeto escolhe Runpod em vez de llama-server HTTP
 
-No arranque (`main.py`, *lifespan*):
+Em `inference/bootstrap.py` (`load_inference_backend`):
 
-1. Se **`ORACULO_RUNPOD_ENDPOINT_ID`** e **`ORACULO_RUNPOD_API_KEY`** estiverem definidos (ambos obrigatórios), o runtime entra em modo **`backend == "runpod"`** e chama `load_runpod(...)`.
-2. Caso contrário, mantém-se o fluxo clássico: URL do **llama-server** via `.env` ou admin (`load_llama_server`).
+1. **Runpod** quando o admin activa **Runpod Serverless** na UI (`app_global.runpod_serverless_enabled = 1`). Endpoint, chave, `model id`, tempos de poll e *startup health* ficam na BD; campos vazios na BD usam fall-back `ORACULO_RUNPOD_*` no `.env`.
+2. **Llama-server HTTP** com a opção **desligada** (omissão): host/porta no admin e/ou `ORACULO_LLAMA_CPP_BASE_URL` / omissão local.
 
-Variáveis úteis (ver também `.env.example`):
+Variáveis úteis no `.env` (fall-back ou só `.env` sem preencher admin; ver também `.env.example`):
 
 | Variável | Função |
 |----------|--------|
@@ -54,9 +54,10 @@ Variáveis úteis (ver também `.env.example`):
 | `ORACULO_RUNPOD_POLL_TIMEOUT_S` | Tempo máximo à espera do job (omissão 900 s) |
 | `ORACULO_RUNPOD_POLL_INTERVAL_S` | Intervalo entre pedidos `GET /status` (omissão 1 s) |
 | `ORACULO_RUNPOD_STARTUP_HEALTH` | Se `1`, no arranque faz `GET .../health` no endpoint |
-| *Fila global, aviso «outro a gerar», modo só interface* | **Configuração global do administrador** — *Configurações do modelo* na UI (tabela `app_global`), aplicada em tempo real; ver também `ORACULO_UI_ONLY` / `--ui-only` no arranque. |
 
-Opcional no arranque: `runpod_endpoint_health` confirma endpoint/chave antes do primeiro chat.
+**Outras definições globais (admin / `app_global`):** fila de geração, aviso «outro a gerar», modo só interface (`ORACULO_UI_ONLY` / `--ui-only`), etc., em *Configurações do modelo*.
+
+Opcional: *startup health* (admin ou `ORACULO_RUNPOD_STARTUP_HEALTH`) faz `runpod_endpoint_health` ao carregar o backend.
 
 ---
 
@@ -131,7 +132,7 @@ O que acontece **ao contentor GPU** depois disso é **política do endpoint** no
 ## 7. Referências no repositório
 
 - Cliente Runpod: `server_for_serveless/inference/runpod_upstream.py` (`runpod_chat_complete`, `iter_runpod_chat_stream`)
-- Escolha llama vs Runpod, geração e fila global: `server_for_serveless/inference/runtime.py` (`inference_single_flight_enabled`, `generate` / `stream`)
+- Escolha llama vs Runpod: `server_for_serveless/inference/bootstrap.py` (`load_inference_backend`); geração e fila global: `server_for_serveless/inference/runtime.py`
 - Arranque e envs: `server_for_serveless/main.py`
 - Worker de exemplo (Docker na raiz do repo): `handler.py`, `Dockerfile`
 - Documentação Runpod (API): https://docs.runpod.io/serverless/endpoints/operation-reference

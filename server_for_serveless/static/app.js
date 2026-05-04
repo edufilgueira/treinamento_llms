@@ -571,7 +571,15 @@
   const settingsGlobalSystemPrompt = document.getElementById("settings-global-system-prompt");
   const settingsSystemPrompt = document.getElementById("settings-system-prompt");
   const settingsBlockLlama = document.getElementById("settings-block-llama");
-  const settingsLlamaEnabled = document.getElementById("settings-llama-enabled");
+  const settingsRunpodEnabled = document.getElementById("settings-runpod-enabled");
+  const settingsRunpodFields = document.getElementById("settings-runpod-fields");
+  const settingsLlamaLocalFields = document.getElementById("settings-llama-local-fields");
+  const settingsRunpodEndpoint = document.getElementById("settings-runpod-endpoint");
+  const settingsRunpodApiKey = document.getElementById("settings-runpod-api-key");
+  const settingsRunpodModel = document.getElementById("settings-runpod-model");
+  const settingsRunpodPollTimeout = document.getElementById("settings-runpod-poll-timeout");
+  const settingsRunpodPollInterval = document.getElementById("settings-runpod-poll-interval");
+  const settingsRunpodStartupHealth = document.getElementById("settings-runpod-startup-health");
   const settingsLlamaHost = document.getElementById("settings-llama-host");
   const settingsLlamaPort = document.getElementById("settings-llama-port");
   const settingsLlamaNCtx = document.getElementById("settings-llama-n-ctx");
@@ -586,6 +594,20 @@
   const settingsUiBlockCrossUser = document.getElementById("settings-ui-block-cross-user");
   const settingsUiOnly = document.getElementById("settings-ui-only");
   let currentUserIsAdmin = false;
+
+  function syncInferenceModeUi() {
+    const on = settingsRunpodEnabled && settingsRunpodEnabled.checked;
+    if (settingsRunpodFields) {
+      settingsRunpodFields.hidden = !on;
+    }
+    if (settingsLlamaLocalFields) {
+      settingsLlamaLocalFields.hidden = !!on;
+    }
+  }
+
+  if (settingsRunpodEnabled) {
+    settingsRunpodEnabled.addEventListener("change", syncInferenceModeUi);
+  }
 
   function isAdminFromApi(v) {
     return v === true || v === 1;
@@ -764,7 +786,7 @@
         if (settingsModalHint) {
           if (currentUserIsAdmin) {
             settingsModalHint.textContent =
-              "Como administrador: prompt global, comportamento do serviço (fila, só interface), prompt pessoal, e na secção abaixo os parâmetros de geração e llama-server. Reinicia o Oráculo após mudar IP, porta ou «Usar llama-server».";
+              "Como administrador: prompt global, comportamento do serviço (fila, só interface), prompt pessoal, e na secção abaixo parâmetros de geração e escolha Runpod vs llama-server local; ao guardar, o backend de inferência recarrega.";
           } else {
             settingsModalHint.textContent =
               "Ajusta o teu system prompt; ele junta-se ao prompt global do serviço em cada geração. Os parâmetros do modelo são fixos na conta de utilizador.";
@@ -789,9 +811,6 @@
         }
         if (currentUserIsAdmin && j.llama_server) {
           const L = j.llama_server;
-          if (settingsLlamaEnabled) {
-            settingsLlamaEnabled.checked = !!L.upstream_enabled;
-          }
           if (settingsLlamaHost) {
             settingsLlamaHost.value = L.api_host != null ? String(L.api_host) : "";
           }
@@ -823,6 +842,33 @@
             const rb = L.reasoning_budget != null ? Number(L.reasoning_budget) : 0;
             settingsLlamaReasoningBudgetOn.checked = rb !== 0;
           }
+        }
+        if (currentUserIsAdmin && j.runpod_server) {
+          const R = j.runpod_server;
+          if (settingsRunpodEnabled) {
+            settingsRunpodEnabled.checked = !!R.serverless_enabled;
+          }
+          if (settingsRunpodEndpoint) {
+            settingsRunpodEndpoint.value = R.endpoint_id != null ? String(R.endpoint_id) : "";
+          }
+          if (settingsRunpodModel) {
+            settingsRunpodModel.value = R.model_id != null ? String(R.model_id) : "runpod";
+          }
+          if (settingsRunpodApiKey) {
+            settingsRunpodApiKey.value = "";
+          }
+          if (settingsRunpodPollTimeout) {
+            settingsRunpodPollTimeout.value = String(R.poll_timeout_s != null ? R.poll_timeout_s : 900);
+          }
+          if (settingsRunpodPollInterval) {
+            settingsRunpodPollInterval.value = String(R.poll_interval_s != null ? R.poll_interval_s : 1);
+          }
+          if (settingsRunpodStartupHealth) {
+            settingsRunpodStartupHealth.checked = !!R.startup_health;
+          }
+        }
+        if (currentUserIsAdmin) {
+          syncInferenceModeUi();
         }
       }
     } catch (_) {}
@@ -889,7 +935,6 @@
       const lRb =
         settingsLlamaReasoningBudgetOn && settingsLlamaReasoningBudgetOn.checked ? -1 : 0;
       body.llama = {
-        upstream_enabled: !!(settingsLlamaEnabled && settingsLlamaEnabled.checked),
         api_host: settingsLlamaHost ? String(settingsLlamaHost.value).trim() : "127.0.0.1",
         api_port: isNaN(lp) ? 8080 : lp,
         n_ctx: isNaN(lnCtx) ? 4096 : lnCtx,
@@ -911,6 +956,24 @@
       }
       if (isNaN(body.llama.repeat_penalty)) {
         body.llama.repeat_penalty = 1.15;
+      }
+      const rpTo = settingsRunpodPollTimeout
+        ? parseInt(String(settingsRunpodPollTimeout.value), 10)
+        : 900;
+      const rpInt = settingsRunpodPollInterval
+        ? parseInt(String(settingsRunpodPollInterval.value), 10)
+        : 1;
+      body.runpod = {
+        serverless_enabled: !!(settingsRunpodEnabled && settingsRunpodEnabled.checked),
+        endpoint_id: settingsRunpodEndpoint ? String(settingsRunpodEndpoint.value).trim() : "",
+        model_id: settingsRunpodModel ? String(settingsRunpodModel.value).trim() || "runpod" : "runpod",
+        poll_timeout_s: isNaN(rpTo) ? 900 : rpTo,
+        poll_interval_s: isNaN(rpInt) ? 1 : rpInt,
+        startup_health: !!(settingsRunpodStartupHealth && settingsRunpodStartupHealth.checked),
+      };
+      const rk = settingsRunpodApiKey ? String(settingsRunpodApiKey.value).trim() : "";
+      if (rk) {
+        body.runpod.api_key = rk;
       }
       body.inference_single_flight = !!(
         settingsInferenceSingleFlight && settingsInferenceSingleFlight.checked

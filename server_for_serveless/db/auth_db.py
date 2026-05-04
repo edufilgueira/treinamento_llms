@@ -416,7 +416,7 @@ def set_global_runtime_prefs(
 
 
 def get_llama_server_settings() -> dict[str, Any]:
-    """Definições llama-server (admin), linha app_global id=1."""
+    """Definições llama-server (admin), linha app_global id=1 (host/porta e sampling)."""
     with _db_lock:
         con = get_connection()
         try:
@@ -424,7 +424,6 @@ def get_llama_server_settings() -> dict[str, Any]:
                 cur.execute(
                     """
                     SELECT
-                        llama_upstream_enabled,
                         llama_api_host,
                         llama_api_port,
                         llama_n_ctx,
@@ -444,23 +443,21 @@ def get_llama_server_settings() -> dict[str, Any]:
     if not row:
         return _default_llama_settings_dict()
     return {
-        "upstream_enabled": int(row[0] or 0) == 1,
-        "api_host": str(row[1] or "127.0.0.1").strip() or "127.0.0.1",
-        "api_port": int(row[2] if row[2] is not None else 8080),
-        "n_ctx": int(row[3] if row[3] is not None else 4096),
-        "max_new_tokens": int(row[4] if row[4] is not None else 2048),
-        "temperature": float(row[5] if row[5] is not None else 0.8),
-        "top_p": float(row[6] if row[6] is not None else 0.9),
-        "repeat_penalty": float(row[7] if row[7] is not None else 1.15),
-        "repeat_last_n": int(row[8] if row[8] is not None else 512),
-        "reasoning": str(row[9] or "off").strip().lower() or "off",
-        "reasoning_budget": int(row[10] if row[10] is not None else 0),
+        "api_host": str(row[0] or "127.0.0.1").strip() or "127.0.0.1",
+        "api_port": int(row[1] if row[1] is not None else 8080),
+        "n_ctx": int(row[2] if row[2] is not None else 4096),
+        "max_new_tokens": int(row[3] if row[3] is not None else 2048),
+        "temperature": float(row[4] if row[4] is not None else 0.8),
+        "top_p": float(row[5] if row[5] is not None else 0.9),
+        "repeat_penalty": float(row[6] if row[6] is not None else 1.15),
+        "repeat_last_n": int(row[7] if row[7] is not None else 512),
+        "reasoning": str(row[8] or "off").strip().lower() or "off",
+        "reasoning_budget": int(row[9] if row[9] is not None else 0),
     }
 
 
 def _default_llama_settings_dict() -> dict[str, Any]:
     return {
-        "upstream_enabled": False,
         "api_host": "127.0.0.1",
         "api_port": 8080,
         "n_ctx": 4096,
@@ -474,9 +471,121 @@ def _default_llama_settings_dict() -> dict[str, Any]:
     }
 
 
+def get_runpod_server_settings() -> dict[str, Any]:
+    """Runpod Serverless (admin), linha app_global id=1."""
+    with _db_lock:
+        con = get_connection()
+        try:
+            with con.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        runpod_serverless_enabled,
+                        runpod_endpoint_id,
+                        runpod_api_key,
+                        runpod_model_id,
+                        runpod_poll_timeout_s,
+                        runpod_poll_interval_s,
+                        runpod_startup_health
+                    FROM app_global WHERE id = 1
+                    """
+                )
+                row = cur.fetchone()
+        finally:
+            con.close()
+    if not row:
+        return _default_runpod_settings_dict()
+    return {
+        "serverless_enabled": int(row[0] or 0) == 1,
+        "endpoint_id": str(row[1] or "").strip(),
+        "api_key": str(row[2] or ""),
+        "model_id": str(row[3] or "runpod").strip() or "runpod",
+        "poll_timeout_s": int(row[4] if row[4] is not None else 900),
+        "poll_interval_s": int(row[5] if row[5] is not None else 1),
+        "startup_health": int(row[6] or 0) == 1,
+    }
+
+
+def _default_runpod_settings_dict() -> dict[str, Any]:
+    return {
+        "serverless_enabled": False,
+        "endpoint_id": "",
+        "api_key": "",
+        "model_id": "runpod",
+        "poll_timeout_s": 900,
+        "poll_interval_s": 1,
+        "startup_health": False,
+    }
+
+
+def set_runpod_server_settings(
+    *,
+    serverless_enabled: bool | None = None,
+    endpoint_id: str | None = None,
+    api_key: str | None = None,
+    model_id: str | None = None,
+    poll_timeout_s: int | None = None,
+    poll_interval_s: int | None = None,
+    startup_health: bool | None = None,
+) -> dict[str, Any]:
+    st = get_runpod_server_settings()
+    en = bool(serverless_enabled) if serverless_enabled is not None else bool(st["serverless_enabled"])
+    eid = (
+        (endpoint_id.strip() if endpoint_id is not None else st["endpoint_id"]) or ""
+    )[:512]
+    key = st["api_key"]
+    if api_key is not None:
+        t = (api_key or "").strip()
+        if t:
+            key = t[:1024]
+    mid = (
+        (model_id.strip() if model_id is not None else st["model_id"]) or "runpod"
+    )[:128]
+    pts = int(poll_timeout_s) if poll_timeout_s is not None else int(st["poll_timeout_s"])
+    if pts < 30 or pts > 86400:
+        raise ValueError("Runpod: tempo máx. de espera do job (s) entre 30 e 86400.")
+    pis = int(poll_interval_s) if poll_interval_s is not None else int(st["poll_interval_s"])
+    if pis < 1 or pis > 120:
+        raise ValueError("Runpod: intervalo de polling (s) entre 1 e 120.")
+    sh = bool(startup_health) if startup_health is not None else bool(st["startup_health"])
+
+    llama_align = 0 if en else 1
+    with _db_lock:
+        con = get_connection()
+        try:
+            with con:
+                with con.cursor() as cur2:
+                    cur2.execute(
+                        """
+                        UPDATE app_global SET
+                            runpod_serverless_enabled = %s,
+                            runpod_endpoint_id = %s,
+                            runpod_api_key = %s,
+                            runpod_model_id = %s,
+                            runpod_poll_timeout_s = %s,
+                            runpod_poll_interval_s = %s,
+                            runpod_startup_health = %s,
+                            llama_upstream_enabled = %s
+                        WHERE id = 1
+                        """,
+                        (
+                            1 if en else 0,
+                            eid,
+                            key,
+                            mid,
+                            pts,
+                            pis,
+                            1 if sh else 0,
+                            llama_align,
+                        ),
+                    )
+        finally:
+            con.close()
+    return get_runpod_server_settings()
+
+
 def set_llama_server_settings(
     *,
-    upstream_enabled: bool | None = None,
     api_host: str | None = None,
     api_port: int | None = None,
     n_ctx: int | None = None,
@@ -489,7 +598,6 @@ def set_llama_server_settings(
     reasoning_budget: int | None = None,
 ) -> dict[str, Any]:
     cur_settings = get_llama_server_settings()
-    u = bool(upstream_enabled) if upstream_enabled is not None else cur_settings["upstream_enabled"]
     h = (api_host.strip() if api_host is not None else cur_settings["api_host"]) or "127.0.0.1"
     p = int(api_port) if api_port is not None else int(cur_settings["api_port"])
     if p < 1 or p > 65535:
@@ -528,6 +636,9 @@ def set_llama_server_settings(
     if rb < -1 or rb > 1_000_000:
         raise ValueError("Reasoning budget: entre -1 e 1000000.")
 
+    rp_runpod = get_runpod_server_settings()
+    llama_align = 0 if rp_runpod["serverless_enabled"] else 1
+
     with _db_lock:
         con = get_connection()
         try:
@@ -536,7 +647,6 @@ def set_llama_server_settings(
                     cur.execute(
                         """
                         UPDATE app_global SET
-                            llama_upstream_enabled = %s,
                             llama_api_host = %s,
                             llama_api_port = %s,
                             llama_n_ctx = %s,
@@ -546,11 +656,11 @@ def set_llama_server_settings(
                             llama_repeat_penalty = %s,
                             llama_repeat_last_n = %s,
                             llama_reasoning = %s,
-                            llama_reasoning_budget = %s
+                            llama_reasoning_budget = %s,
+                            llama_upstream_enabled = %s
                         WHERE id = 1
                         """,
                         (
-                            1 if u else 0,
                             h[:256],
                             p,
                             nc,
@@ -561,6 +671,7 @@ def set_llama_server_settings(
                             rln,
                             reas,
                             rb,
+                            llama_align,
                         ),
                     )
         finally:
@@ -569,9 +680,10 @@ def set_llama_server_settings(
 
 
 def llama_upstream_base_url_from_db() -> str | None:
-    s = get_llama_server_settings()
-    if not s["upstream_enabled"]:
+    rp = get_runpod_server_settings()
+    if rp["serverless_enabled"]:
         return None
+    s = get_llama_server_settings()
     host = s["api_host"].strip()
     if not host:
         return None

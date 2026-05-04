@@ -218,6 +218,7 @@ def init_schema() -> None:
         _ensure_chat_stats_columns(cur)
         _ensure_app_global_llama_columns(cur)
         _ensure_app_global_runtime_columns(cur)
+        _ensure_app_global_runpod_columns(cur)
     finally:
         con.close()
 
@@ -317,6 +318,34 @@ def _ensure_app_global_runtime_columns(cur: Any) -> None:
         ("inference_single_flight", "SMALLINT NOT NULL DEFAULT 1"),
         ("ui_block_cross_user_generation", "SMALLINT NOT NULL DEFAULT 1"),
         ("ui_only", "SMALLINT NOT NULL DEFAULT 0"),
+    ]
+    for col, decl in specs:
+        if col not in have:
+            cur.execute(
+                sql.SQL("ALTER TABLE app_global ADD COLUMN ")
+                + sql.Identifier(col)
+                + sql.SQL(" ")
+                + sql.SQL(decl)
+            )
+
+
+def _ensure_app_global_runpod_columns(cur: Any) -> None:
+    """Migração idempotente: Runpod Serverless em app_global (admin)."""
+    cur.execute(
+        """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'app_global'
+        """
+    )
+    have = {r[0] for r in cur.fetchall()}
+    specs: list[tuple[str, str]] = [
+        ("runpod_serverless_enabled", "SMALLINT NOT NULL DEFAULT 0"),
+        ("runpod_endpoint_id", "TEXT NOT NULL DEFAULT ''"),
+        ("runpod_api_key", "TEXT NOT NULL DEFAULT ''"),
+        ("runpod_model_id", "TEXT NOT NULL DEFAULT 'runpod'"),
+        ("runpod_poll_timeout_s", "INTEGER NOT NULL DEFAULT 900"),
+        ("runpod_poll_interval_s", "INTEGER NOT NULL DEFAULT 1"),
+        ("runpod_startup_health", "SMALLINT NOT NULL DEFAULT 0"),
     ]
     for col, decl in specs:
         if col not in have:
