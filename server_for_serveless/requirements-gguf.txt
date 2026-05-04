@@ -1,0 +1,10 @@
+# Inferência com ficheiro .gguf (llama.cpp via Python).
+# Instale *em conjunto* com server/requirements.txt, por exemplo:
+#   pip install -r server/requirements.txt
+#   pip install -r server/requirements-gguf.txt
+#
+# Binários CPU vs GPU: https://llama-cpp-python.readthedocs.io/en/latest/installation/
+#   Ex.: forçar CPU só:  CMAKE_ARGS="-DLLAMA_BLAS=OFF" pip install --force-reinstall --no-cache-dir llama-cpp-python
+#   CUDA (NVIDIA): ver documentação com CMAKE_ARGS e wheel pré-compilado apropriado.
+
+llama-cpp-python>=0.2.90

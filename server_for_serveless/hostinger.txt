@@ -1,0 +1,37 @@
+# Notas de deploy (substitui HOST pelo teu servidor; credenciais só em server_for_serveless/.env — não commits).
+
+ssh root@187.77.44.167
+
+scp merged_qwen3-8B.z02 root@187.77.44.167:/root/treinamento_llms/trein/outputs
+
+scp root@HOST:/root/treinamento_llms/trein/outputs/lora_adapter.zip ./
+
+segundo plano
+nohup ./server_for_serveless/serve.sh > app.log 2>&1 &
+nohup ./server_for_serveless/serve_maintenance.sh > app.log 2>&1 &
+
+
+ps aux | grep python
+
+tail -f ~/treinamento_llms/app.log
+
+find ~ -type d -name ".venv"
+
+# Variáveis: copiar para server_for_serveless/.env (ver server_for_serveless/.env.example), não colocar passwords aqui.
+# Ou systemd: EnvironmentFile=... ou Environment= ligado ao mesmo ficheiro; .ini próprio não é lido pelo Python dotenv.
+# ORACULO_LLAMA_CPP_BASE_URL=http://127.0.0.1:8080
+# ORACULO_PG_HOST=127.0.0.1
+# ORACULO_PG_PORT=5432
+# ORACULO_PG_USER=postgres
+# ORACULO_PG_PASSWORD=
+# ORACULO_PG_DATABASE=oraculo
+# ORACULO_PG_SSLMODE=prefer
+
+sudo apt update
+sudo apt install git -y
+
+# Manutenção: parar o Oráculo e servir só página 503 na mesma porta (8765).
+# cd ~/treinamento_llms
+# pkill -f serve_lora || true   # ou: systemctl stop oraculo  (se tiveres unit)
+# nohup python3 server_for_serveless/serve_maintenance.py --host 0.0.0.0 --port 8765 > maintenance.log 2>&1 &
+# Para voltar: kill do serve_maintenance ; voltar a nohup ./server_for_serveless/serve.sh ...

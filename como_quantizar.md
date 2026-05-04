@@ -42,6 +42,7 @@ docker build --platform linux/amd64 -f Dockerfile --build-arg LLAMA_BASE=server 
 docker run -d --name llama-qwen -p 8080:8080 --restart unless-stopped kiaia-server:cpu
 
 # Enviar para Docker Hub
+docker build --platform linux/amd64 -f Dockerfile -t kiaia-server:cuda .
 docker login -u edufilgueira
 docker tag kiaia-server:cuda edufilgueira/kiaia-server:cuda
 docker push edufilgueira/kiaia-server:cuda

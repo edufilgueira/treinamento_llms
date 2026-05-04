@@ -1,5 +1,5 @@
-# Runpod Serverless: Python chama llama-server (CUDA) uma vez por worker; handler = HTTP local.
-# Base: https://github.com/ggml-org/llama.cpp/pkgs/container/llama.cpp
+# Runpod Serverless: handler em streaming (yield SSE do llama-server) + return_aggregate_stream;
+# Oráculo consome GET .../stream/{job_id}. Base: https://github.com/ggml-org/llama.cpp/pkgs/container/llama.cpp
 #
 # Build (linux/amd64 para Runpod):
 #   docker build --platform linux/amd64 -f Dockerfile -t SEU_USER/llama-qwen-runpod:latest .

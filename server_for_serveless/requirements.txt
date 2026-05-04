@@ -1,0 +1,10 @@
+# Oráculo: API (FastAPI), PostgreSQL, UI, httpx (llama-server). Sem PyTorch/transformers no servidor.
+# Instale com: pip install -r server/requirements.txt
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+httpx>=0.27.0
+itsdangerous>=2.0.0
+bcrypt>=4.0.0
+psycopg2-binary>=2.9.9
+python-dotenv>=1.0.0

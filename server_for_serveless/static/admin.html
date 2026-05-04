@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Monitorização — Oráculo Kiaiá</title>
+  <style>
+    html, body { margin: 0; min-height: 100%; background: #212121; color: #ececec; }
+  </style>
+  <link rel="stylesheet" href="app.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js" crossorigin="anonymous"></script>
+  <script src="admin.js" defer></script>
+</head>
+<body class="admin-body">
+  <div class="admin-app">
+    <header class="admin-topbar">
+      <a href="/" class="admin-back">← Voltar ao chat</a>
+      <h1 class="admin-title">Monitorização</h1>
+      <p class="admin-legend">
+        <span class="admin-legend__dot admin-legend__dot--on"></span> ligado
+        <span class="admin-legend__dot admin-legend__dot--busy" style="margin-left:1rem"></span> a gerar
+      </p>
+    </header>
+    <div class="admin-grid">
+      <section class="admin-panel" aria-label="Utilizadores">
+        <h2 class="admin-panel__h">Utilizadores</h2>
+        <ul class="admin-user-list" id="admin-user-list"></ul>
+        <p class="admin-hint" id="admin-user-err" hidden></p>
+      </section>
+      <section class="admin-panel" aria-label="Sessões do utilizador">
+        <h2 class="admin-panel__h" id="admin-sessions-title">Sessões</h2>
+        <p class="admin-placeholder" id="admin-sessions-placeholder">Selecione um utilizador.</p>
+        <ul class="admin-session-list" id="admin-session-list" hidden></ul>
+      </section>
+    </div>
+
+    <section
+      class="admin-inline-view"
+      id="admin-session-view"
+      aria-labelledby="admin-view-title"
+    >
+      <h2 class="admin-inline-view__title" id="admin-view-title">Histórico</h2>
+      <p class="admin-placeholder" id="admin-session-view-placeholder">
+        Selecione uma sessão na lista acima.
+      </p>
+      <main
+        id="admin-view-log"
+        class="chat-log admin-inline-chat-log"
+        aria-label="Mensagens da sessão"
+        aria-live="polite"
+        hidden
+      >
+        <div class="chat-log-inner" id="admin-view-log-inner"></div>
+      </main>
+    </section>
+  </div>
+</body>
+</html>
