@@ -32,12 +32,47 @@ def _headers(api_key: str) -> dict[str, str]:
     }
 
 
+def _piece_to_text(p: Any) -> str:
+    """Um único segmento agregado (``return_aggregate_stream`` pode ser str ou dict)."""
+    if p is None:
+        return ""
+    if isinstance(p, str):
+        return p
+    if isinstance(p, (int, float, bool)):
+        return str(p)
+    if isinstance(p, dict):
+        err = p.get("error")
+        if err:
+            raise RuntimeError(str(err))
+        for k in ("text", "content"):
+            v = p.get(k)
+            if isinstance(v, str):
+                return v
+        inner = p.get("output")
+        if isinstance(inner, str):
+            return inner
+        if isinstance(inner, list):
+            return "".join(_piece_to_text(x) for x in inner)
+        return ""
+    if isinstance(p, list):
+        return "".join(_piece_to_text(x) for x in p)
+    return str(p)
+
+
 def _parse_worker_output(raw: Any) -> str:
-    """Interpreta o retorno do handler Runpod (dict com output/error ou string)."""
+    """Interpreta o retorno do handler Runpod (string, lista agregada, ou dict)."""
     if raw is None:
         raise RuntimeError("Runpod devolveu output vazio.")
     if isinstance(raw, str):
         return raw
+    if isinstance(raw, list):
+        if len(raw) == 0:
+            raise RuntimeError(
+                "Runpod completou com lista de saída vazia (0 yields do handler). "
+                "Confirme no painel Runpod os logs do worker: llama-server a responder, "
+                "handler em streaming e mesma imagem que `handler.py` do repositório."
+            )
+        return "".join(_piece_to_text(x) for x in raw)
     if isinstance(raw, dict):
         err = raw.get("error")
         if err:
@@ -47,12 +82,21 @@ def _parse_worker_output(raw: Any) -> str:
             raise RuntimeError(f"Runpod output sem campo 'output': {raw!r}")
         if isinstance(out, str):
             return out
+        if isinstance(out, list):
+            if len(out) == 0:
+                raise RuntimeError(
+                    "Runpod output.output é uma lista vazia (handler não devolveu texto). "
+                    "Veja logs do worker e se `/v1/chat/completions` com stream devolve deltas `content`."
+                )
+            return "".join(_piece_to_text(x) for x in out)
         if isinstance(out, dict) and "output" in out:
             inner = out.get("output")
             if isinstance(inner, str):
                 return inner
-        return str(out)
-    return str(raw)
+            if isinstance(inner, list):
+                return "".join(_piece_to_text(x) for x in inner)
+        return _piece_to_text(out) or str(out)
+    return _piece_to_text(raw) or str(raw)
 
 
 def _extract_stream_deltas(obj: Any) -> list[str]:
