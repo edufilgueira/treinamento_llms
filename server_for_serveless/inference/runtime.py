@@ -363,6 +363,7 @@ class ModelRuntime:
                     top_p=top_p,
                     cancel_event=cancel_event,
                     poll_timeout_s=self._runpod_poll_timeout_s,
+                    poll_interval_s=self._runpod_poll_interval_s,
                 ):
                     acc += delta
                     yield delta

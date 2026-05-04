@@ -127,14 +127,76 @@ def _extract_stream_deltas(obj: Any) -> list[str]:
             for s in t:
                 if s:
                     out.append(str(s))
-        elif isinstance(t, str) and t:
+            return out
+        if isinstance(t, str) and t:
             out.append(t)
+            return out
+        d = payload.get("delta")
+        if isinstance(d, dict):
+            piece = d.get("content")
+            if isinstance(piece, str) and piece:
+                out.append(piece)
+                return out
+        elif isinstance(d, str) and d:
+            out.append(d)
+            return out
+        c = payload.get("content")
+        if isinstance(c, str) and c:
+            out.append(c)
+            return out
         return out
     if isinstance(payload, list):
         for s in payload:
             if isinstance(s, str) and s:
                 out.append(s)
+            else:
+                out.extend(_extract_stream_deltas(s))
+        return out
     return out
+
+
+def _poll_runpod_job_output(
+    client: httpx.Client,
+    endpoint_id: str,
+    api_key: str,
+    job_id: str,
+    *,
+    poll_interval_s: float,
+    timeout_s: float,
+) -> tuple[str, dict[str, int] | None]:
+    """Espera por ``COMPLETED`` e devolve texto + usage (``GET /status``)."""
+    eid = (endpoint_id or "").strip()
+    key = (api_key or "").strip()
+    status_url = f"{API_BASE}/{eid}/status/{job_id}"
+    deadline = time.monotonic() + max(15.0, float(timeout_s))
+    interval = max(0.2, float(poll_interval_s))
+
+    while time.monotonic() < deadline:
+        time.sleep(interval)
+        sr = client.get(status_url, headers=_headers(key))
+        sr.raise_for_status()
+        st = sr.json()
+        status = (st.get("status") or "").upper()
+        if status == "COMPLETED":
+            text = _parse_worker_output(st.get("output"))
+            usage_out: dict[str, int] | None = None
+            u = st.get("usage") if isinstance(st.get("usage"), dict) else None
+            if isinstance(u, dict):
+                usage_out = {
+                    "prompt_tokens": int(u.get("input_tokens") or u.get("prompt_tokens") or 0),
+                    "completion_tokens": int(
+                        u.get("output_tokens") or u.get("completion_tokens") or 0
+                    ),
+                }
+            return text, usage_out
+        if status in ("FAILED", "CANCELLED", "TIMED_OUT", "ERROR"):
+            err = st.get("error") or st
+            raise RuntimeError(f"Runpod job {status}: {err}")
+
+    raise TimeoutError(
+        f"Timeout ({timeout_s}s) à espera do job Runpod {job_id!r}. "
+        "Aumenta o tempo máx. nas configurações Runpod (admin) ou ORACULO_RUNPOD_POLL_TIMEOUT_S."
+    )
 
 
 def _cancel_runpod_job(client: httpx.Client, eid: str, api_key: str, job_id: str) -> None:
@@ -155,10 +217,14 @@ def iter_runpod_chat_stream(
     top_p: float,
     cancel_event: threading.Event | None = None,
     poll_timeout_s: float | None = None,
+    poll_interval_s: float | None = None,
 ) -> Iterator[str]:
     """
-    Submete ``POST /run`` e lê deltas de texto via ``GET /stream/{job_id}``.
-    Requer worker com handler em streaming (``handler.py`` na raiz do repo).
+    ``POST /run`` + ``GET /stream/{job_id}`` para deltas.
+
+    Se o `/stream` não devolver texto parseável (formato SSE/JSON diferente), faz
+    fall-back para o mesmo job com ``GET /status`` (saída agregada), como no chat
+    não-stream — evita resposta vazia e 0 tokens na UI.
     """
     eid = (endpoint_id or "").strip()
     if not eid:
@@ -180,6 +246,12 @@ def iter_runpod_chat_stream(
         else (os.environ.get("ORACULO_RUNPOD_POLL_TIMEOUT_S") or "").strip()
         or DEFAULT_POLL_TIMEOUT_S
     )
+    interval = float(
+        poll_interval_s
+        if poll_interval_s is not None and float(poll_interval_s) > 0
+        else (os.environ.get("ORACULO_RUNPOD_POLL_INTERVAL_S") or "").strip()
+        or DEFAULT_POLL_INTERVAL_S
+    )
     run_url = f"{API_BASE}/{eid}/run"
     headers_stream = {**_headers(key), "Accept": "application/json"}
 
@@ -194,6 +266,7 @@ def iter_runpod_chat_stream(
             raise RuntimeError(f"Runpod /run sem id: {job!r}")
 
         stream_url = f"{API_BASE}/{eid}/stream/{job_id}"
+        stream_had_delta = False
         with client.stream("GET", stream_url, headers=headers_stream) as resp:
             try:
                 resp.raise_for_status()
@@ -206,14 +279,17 @@ def iter_runpod_chat_stream(
                 raise
 
             buffer = ""
+            stream_stopped = False
             for chunk in resp.iter_text():
+                if stream_stopped:
+                    break
                 if cancel_event is not None and cancel_event.is_set():
                     _cancel_runpod_job(client, eid, key, job_id)
                     break
                 if not chunk:
                     continue
                 buffer += chunk
-                while "\n" in buffer:
+                while "\n" in buffer and not stream_stopped:
                     line, buffer = buffer.split("\n", 1)
                     line = line.strip()
                     if not line:
@@ -221,13 +297,15 @@ def iter_runpod_chat_stream(
                     if line.startswith("data:"):
                         line = line[5:].strip()
                     if line == "[DONE]":
-                        return
+                        stream_stopped = True
+                        break
                     try:
                         obj = json.loads(line)
                     except json.JSONDecodeError:
                         continue
                     for delta in _extract_stream_deltas(obj):
                         if delta:
+                            stream_had_delta = True
                             yield delta
 
             if cancel_event is not None and cancel_event.is_set():
@@ -240,9 +318,24 @@ def iter_runpod_chat_stream(
                     obj = json.loads(tail)
                     for delta in _extract_stream_deltas(obj):
                         if delta:
+                            stream_had_delta = True
                             yield delta
                 except json.JSONDecodeError:
                     pass
+
+        if cancel_event is not None and cancel_event.is_set():
+            return
+        if not stream_had_delta:
+            text, _u = _poll_runpod_job_output(
+                client,
+                eid,
+                key,
+                job_id,
+                poll_interval_s=max(0.2, interval),
+                timeout_s=max(30.0, read_timeout),
+            )
+            if text.strip():
+                yield text
 
 
 def runpod_chat_complete(
@@ -287,7 +380,6 @@ def runpod_chat_complete(
     )
 
     run_url = f"{API_BASE}/{eid}/run"
-    deadline = time.monotonic() + max(30.0, timeout_s)
 
     with httpx.Client(timeout=httpx.Timeout(120.0, connect=30.0)) as client:
         r = client.post(
@@ -301,35 +393,14 @@ def runpod_chat_complete(
         if not job_id:
             raise RuntimeError(f"Runpod /run sem id: {job!r}")
 
-        status_url = f"{API_BASE}/{eid}/status/{job_id}"
-
-        while time.monotonic() < deadline:
-            time.sleep(max(0.2, interval))
-            sr = client.get(status_url, headers=_headers(key))
-            sr.raise_for_status()
-            st = sr.json()
-            status = (st.get("status") or "").upper()
-            if status == "COMPLETED":
-                text = _parse_worker_output(st.get("output"))
-                usage_out: dict[str, int] | None = None
-                u = st.get("usage") if isinstance(st.get("usage"), dict) else None
-                if isinstance(u, dict):
-                    usage_out = {
-                        "prompt_tokens": int(u.get("input_tokens") or u.get("prompt_tokens") or 0),
-                        "completion_tokens": int(
-                            u.get("output_tokens") or u.get("completion_tokens") or 0
-                        ),
-                    }
-                return text, usage_out
-            if status in ("FAILED", "CANCELLED", "TIMED_OUT", "ERROR"):
-                err = st.get("error") or st
-                raise RuntimeError(f"Runpod job {status}: {err}")
-            # IN_QUEUE, IN_PROGRESS, …
-
-    raise TimeoutError(
-        f"Timeout ({timeout_s}s) à espera do job Runpod {job_id!r}. "
-        "Aumenta o tempo máx. nas configurações Runpod (admin) ou ORACULO_RUNPOD_POLL_TIMEOUT_S."
-    )
+        return _poll_runpod_job_output(
+            client,
+            eid,
+            key,
+            job_id,
+            poll_interval_s=interval,
+            timeout_s=timeout_s,
+        )
 
 
 def runpod_endpoint_health(endpoint_id: str, api_key: str) -> dict[str, Any]:
