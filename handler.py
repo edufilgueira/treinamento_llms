@@ -35,7 +35,7 @@ import httpx
 import runpod
 
 LLAMA_PORT = int(os.environ.get("LLAMA_PORT", "8080"))
-MODEL_PATH = os.environ.get("MODEL_PATH", "/workspace/Qwen3-8B-F16-Q4_K_M.gguf")
+MODEL_PATH = os.environ.get("MODEL_PATH", "/models/Qwen3-8B-F16-Q4_K_M.gguf")
 LLAMA_CTX = os.environ.get("LLAMA_CTX", "8192")
 N_GPU_LAYERS = os.environ.get("N_GPU_LAYERS", "99")
 

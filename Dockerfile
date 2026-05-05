@@ -28,7 +28,9 @@ FROM ${LLAMA_IMAGE}
 WORKDIR /app
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV MODEL_PATH=/workspace/Qwen3-8B-F16-Q4_K_M.gguf
+# Volume Runpod: montar em /models para este default coincidir com o nome do .gguf no disco.
+# Se o mount for outro (ex. /workspace), define MODEL_PATH nas Environment Variables do endpoint.
+ENV MODEL_PATH=/models/Qwen3-8B-F16-Q4_K_M.gguf
 ENV LLAMA_PORT=8080
 ENV LLAMA_CTX=8192
 ENV N_GPU_LAYERS=99
