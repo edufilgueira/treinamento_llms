@@ -24,8 +24,7 @@ FROM ubuntu:24.04 AS pydeps
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3-pip \
-    && pip install --no-cache-dir --break-system-packages --upgrade pip \
-    && pip wheel --no-cache-dir --wheel-dir /wheels runpod httpx \
+    && python3 -m pip wheel --no-cache-dir --break-system-packages --wheel-dir /wheels runpod httpx \
     && rm -rf /root/.cache/pip \
     && apt-get purge -y python3-pip \
     && apt-get autoremove -y \
@@ -48,7 +47,7 @@ COPY --from=pydeps /wheels /wheels
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 python3-pip \
-    && pip install --no-cache-dir --break-system-packages --no-index --find-links=/wheels runpod httpx \
+    && python3 -m pip install --no-cache-dir --break-system-packages --no-index --find-links=/wheels runpod httpx \
     && rm -rf /wheels /root/.cache/pip \
     && apt-get purge -y python3-pip \
     && apt-get autoremove -y \
