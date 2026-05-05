@@ -46,7 +46,23 @@ docker build --platform linux/amd64 -f Dockerfile -t kiaia-server:cuda .
 docker login -u edufilgueira
 docker tag kiaia-server:cuda edufilgueira/kiaia-server:cuda
 docker push edufilgueira/kiaia-server:cuda
+
+docker tag kiaia-server:cuda IP:5000/kiaia-server:cuda
+docker push 
+
+registry.okiaia.com/kiaia-server:cuda
+http://IP:5000/v2/_catalog
 ```
+
+
+docker run -d \
+  -p 5000:5000 \
+  --name registry \
+  -v /opt/registry:/var/lib/registry \
+  registry:2
+
+
+
 
 ```bash
 apt install zip -y

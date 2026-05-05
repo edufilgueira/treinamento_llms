@@ -1,7 +1,7 @@
 # Runpod Serverless: handler em streaming (yield SSE do llama-server) + return_aggregate_stream;
 # Oráculo consome GET .../stream/{job_id}. Base: https://github.com/ggml-org/llama.cpp/pkgs/container/llama.cpp
 #
-# Esta imagem NÃO inclui o .gguf (pull rápido). No Runpod: Network Volume montado em /models (ou outro path)
+# Esta imagem NÃO inclui o .gguf (pull rápido). No Runpod: Network Volume montado em /kiaia_volume (ou outro path)
 # e MODEL_PATH=(path do .gguf). Python via venv — evita pip antigo do Ubuntu e PEP 668.
 #
 # Build (linux/amd64 para Runpod):
@@ -28,9 +28,9 @@ FROM ${LLAMA_IMAGE}
 WORKDIR /app
 
 ENV DEBIAN_FRONTEND=noninteractive
-# Volume Runpod: montar em /models para este default coincidir com o nome do .gguf no disco.
+# Volume Runpod: montar em /kiaia_volume para este default coincidir com o nome do .gguf no disco.
 # Se o mount for outro (ex. /workspace), define MODEL_PATH nas Environment Variables do endpoint.
-ENV MODEL_PATH=/models/Qwen3-8B-F16-Q4_K_M.gguf
+ENV MODEL_PATH=/kiaia_volume/Qwen3-8B-F16-Q4_K_M.gguf
 ENV LLAMA_PORT=8080
 ENV LLAMA_CTX=8192
 ENV N_GPU_LAYERS=99
