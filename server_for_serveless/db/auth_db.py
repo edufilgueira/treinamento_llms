@@ -471,6 +471,31 @@ def _default_llama_settings_dict() -> dict[str, Any]:
     }
 
 
+_RUNPOD_API_KEY_MASKED_DISPLAY_RE = re.compile(r"^.{4}\*+.{4}$")
+
+
+def mask_runpod_api_key_for_settings_display(secret: str | None) -> str:
+    """Ex.: ``rpa_…`` → ``rpa_********…9oyf`` (4 início + 4 fim; meio só ``*``)."""
+    t = (secret or "").strip()
+    if not t:
+        return ""
+    n = len(t)
+    head, tail = 4, 4
+    if n <= head + tail:
+        return "*" * n
+    return t[:head] + "*" * (n - head - tail) + t[-tail:]
+
+
+def is_runpod_api_key_masked_placeholder(value: str | None) -> bool:
+    """Valor reenviado pela UI (mascarado) ou só asteriscos — não gravar como chave real."""
+    s = (value or "").strip()
+    if not s:
+        return True
+    if re.fullmatch(r"\*+", s):
+        return True
+    return bool(_RUNPOD_API_KEY_MASKED_DISPLAY_RE.fullmatch(s))
+
+
 def get_runpod_server_settings() -> dict[str, Any]:
     """Runpod Serverless (admin), linha app_global id=1."""
     with _db_lock:
@@ -536,7 +561,7 @@ def set_runpod_server_settings(
     key = st["api_key"]
     if api_key is not None:
         t = (api_key or "").strip()
-        if t:
+        if t and not is_runpod_api_key_masked_placeholder(t):
             key = t[:1024]
     mid = (
         (model_id.strip() if model_id is not None else st["model_id"]) or "runpod"

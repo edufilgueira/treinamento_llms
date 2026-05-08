@@ -596,6 +596,7 @@
   const settingsUiBlockCrossUser = document.getElementById("settings-ui-block-cross-user");
   const settingsUiOnly = document.getElementById("settings-ui-only");
   let currentUserIsAdmin = false;
+  let runpodApiKeyMaskedSnapshot = "";
 
   function isRunpodBackendSelected() {
     var r = document.querySelector('input[name="settings-inference-backend"]:checked');
@@ -961,8 +962,9 @@
           if (settingsRunpodModel) {
             settingsRunpodModel.value = R.model_id != null ? String(R.model_id) : "runpod";
           }
+          runpodApiKeyMaskedSnapshot = R.api_key != null ? String(R.api_key) : "";
           if (settingsRunpodApiKey) {
-            settingsRunpodApiKey.value = "";
+            settingsRunpodApiKey.value = runpodApiKeyMaskedSnapshot;
           }
           if (settingsRunpodPollTimeout) {
             settingsRunpodPollTimeout.value = String(R.poll_timeout_s != null ? R.poll_timeout_s : 900);
@@ -1080,7 +1082,7 @@
         startup_health: !!(settingsRunpodStartupHealth && settingsRunpodStartupHealth.checked),
       };
       const rk = settingsRunpodApiKey ? String(settingsRunpodApiKey.value).trim() : "";
-      if (rk) {
+      if (rk && rk !== runpodApiKeyMaskedSnapshot) {
         body.runpod.api_key = rk;
       }
       body.inference_single_flight = !!(

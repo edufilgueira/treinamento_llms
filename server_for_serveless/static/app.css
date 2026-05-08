@@ -2463,6 +2463,11 @@ body.auth-page {
   line-height: 1.35;
 }
 
+.modal__input--runpod-key {
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: 0.82rem;
+}
+
 .modal__input,
 .modal__textarea {
   width: 100%;

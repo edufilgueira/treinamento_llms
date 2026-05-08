@@ -25,8 +25,10 @@ from server_for_serveless.db.auth_db import (
     get_runpod_server_settings,
     get_user_model_settings,
     get_user_names,
+    is_runpod_api_key_masked_placeholder,
     is_user_admin,
     list_all_users,
+    mask_runpod_api_key_for_settings_display,
     set_global_runtime_prefs,
     set_global_system_prompt,
     set_llama_server_settings,
@@ -164,7 +166,7 @@ def _user_settings_out(uid: int) -> UserModelSettingsOut:
         runpod_out = RunpodServerSettingsOut(
             serverless_enabled=bool(rs["serverless_enabled"]),
             endpoint_id=str(rs["endpoint_id"]),
-            api_key=str(rs["api_key"]),
+            api_key=mask_runpod_api_key_for_settings_display(str(rs["api_key"] or "")),
             model_id=str(rs["model_id"]),
             poll_timeout_s=int(rs["poll_timeout_s"]),
             poll_interval_s=int(rs["poll_interval_s"]),
@@ -656,7 +658,7 @@ async def api_admin_runpod_verify(
     from server_for_serveless.inference.runpod_upstream import verify_runpod_openai_connection
 
     key = (body.api_key or "").strip()
-    if not key:
+    if not key or is_runpod_api_key_masked_placeholder(key):
         st = get_runpod_server_settings()
         key = (st.get("api_key") or "").strip()
     if not key:
