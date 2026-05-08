@@ -5,6 +5,17 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, field_validator
 
 
+class RunpodConnectionVerifyIn(BaseModel):
+    endpoint_id: str = Field(..., max_length=2048)
+    api_key: str = Field("", max_length=1024)
+
+
+class RunpodConnectionVerifyOut(BaseModel):
+    ok: bool
+    message: str = ""
+    models: list[str] = Field(default_factory=list)
+
+
 class Message(BaseModel):
     role: str
     content: str

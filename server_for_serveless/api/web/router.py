@@ -8,6 +8,8 @@ import re
 import secrets
 import threading
 import time
+
+import httpx
 from pathlib import Path
 from typing import Any
 
@@ -63,6 +65,8 @@ from server_for_serveless.schemas.web import (
     JobCreateOut,
     JobStateOut,
     LlamaServerSettingsOut,
+    RunpodConnectionVerifyIn,
+    RunpodConnectionVerifyOut,
     RunpodServerSettingsOut,
     SessionTitleUpdate,
     UserModelSettingsIn,
@@ -641,6 +645,49 @@ async def serve_app_js_legacy():
 @router.get("/api/status")
 async def status(_uid: UserIdDep):
     return get_runtime().status_public()
+
+
+@router.post("/api/admin/runpod/verify")
+async def api_admin_runpod_verify(
+    _admin: AdminIdDep,
+    body: RunpodConnectionVerifyIn,
+) -> RunpodConnectionVerifyOut:
+    """Testa GET /v1/models no proxy OpenAI do endpoint Runpod (igual ao fluxo OpenWebUI)."""
+    from server_for_serveless.inference.runpod_upstream import verify_runpod_openai_connection
+
+    key = (body.api_key or "").strip()
+    if not key:
+        st = get_runpod_server_settings()
+        key = (st.get("api_key") or "").strip()
+    if not key:
+        return RunpodConnectionVerifyOut(
+            ok=False,
+            message="Preencha a API key no formulário ou guarde as configurações Runpod com chave antes de testar.",
+            models=[],
+        )
+    try:
+        out = verify_runpod_openai_connection(body.endpoint_id, key)
+        return RunpodConnectionVerifyOut(
+            ok=bool(out.get("ok")),
+            message=str(out.get("message") or ""),
+            models=list(out.get("models") or []),
+        )
+    except ValueError as e:
+        return RunpodConnectionVerifyOut(ok=False, message=str(e), models=[])
+    except httpx.HTTPStatusError as e:
+        detail = ""
+        try:
+            detail = (e.response.text or "")[:500]
+        except Exception:
+            pass
+        reason = getattr(e.response, "reason_phrase", None) or ""
+        return RunpodConnectionVerifyOut(
+            ok=False,
+            message=f"HTTP {e.response.status_code} {reason}: {detail}".strip(),
+            models=[],
+        )
+    except Exception as e:
+        return RunpodConnectionVerifyOut(ok=False, message=str(e), models=[])
 
 
 @router.get("/api/admin/users")

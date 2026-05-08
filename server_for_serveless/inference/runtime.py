@@ -178,7 +178,7 @@ class ModelRuntime:
         poll_interval_s: float | None = None,
         startup_health: bool = False,
     ) -> None:
-        """Delegação ao worker Serverless (handler compatível com messages/max_tokens/…)."""
+        """Carrega endpoint Runpod: inferência vía proxy OpenAI (``/openai/v1``), como no OpenWebUI. Health opcional no ``/health`` clássico."""
         from .runpod_upstream import DEFAULT_POLL_INTERVAL_S, DEFAULT_POLL_TIMEOUT_S, runpod_endpoint_health
 
         self.ui_only = False
@@ -286,17 +286,19 @@ class ModelRuntime:
             )
 
             if self._backend == "runpod":
-                from .runpod_upstream import runpod_chat_complete
+                from .llama_server_upstream import chat_completions_complete
+                from .runpod_upstream import runpod_openai_upstream_base
 
-                text, usage = runpod_chat_complete(
-                    self._runpod_endpoint_id,
-                    self._runpod_api_key,
-                    messages=messages,
+                text, usage = chat_completions_complete(
+                    runpod_openai_upstream_base(self._runpod_endpoint_id),
+                    messages,
+                    model=self._model_id,
                     max_tokens=mnt_eff,
                     temperature=temperature,
                     top_p=top_p,
-                    poll_timeout_s=self._runpod_poll_timeout_s,
-                    poll_interval_s=self._runpod_poll_interval_s,
+                    api_key=self._runpod_api_key,
+                    chat_template_kwargs=None,
+                    extra_fields=None,
                 )
             else:
                 if not self._upstream_base:
@@ -351,19 +353,21 @@ class ModelRuntime:
             )
 
             if self._backend == "runpod":
-                from .runpod_upstream import iter_runpod_chat_stream
+                from .llama_server_upstream import chat_completions_stream_deltas
+                from .runpod_upstream import runpod_openai_upstream_base
 
                 acc = ""
-                for delta in iter_runpod_chat_stream(
-                    self._runpod_endpoint_id,
-                    self._runpod_api_key,
-                    messages=messages,
+                for delta in chat_completions_stream_deltas(
+                    runpod_openai_upstream_base(self._runpod_endpoint_id),
+                    messages,
+                    model=self._model_id,
                     max_tokens=mnt_eff,
                     temperature=temperature,
                     top_p=top_p,
+                    api_key=self._runpod_api_key,
+                    chat_template_kwargs=None,
                     cancel_event=cancel_event,
-                    poll_timeout_s=self._runpod_poll_timeout_s,
-                    poll_interval_s=self._runpod_poll_interval_s,
+                    extra_fields=None,
                 ):
                     acc += delta
                     yield delta

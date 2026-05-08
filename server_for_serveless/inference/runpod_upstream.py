@@ -1,10 +1,12 @@
 """
-Cliente HTTP para Runpod Serverless (endpoint em fila).
+Cliente HTTP para Runpod Serverless.
 
-Envia o mesmo ``input`` que o ``handler.py`` do worker espera (messages, max_tokens, …).
-Respostas **sem** streaming usam ``POST /run`` + ``GET /status``. Respostas **com**
-streaming (UI token a token) usam ``POST /run`` + ``GET /stream/{job_id}`` — o worker
-deve ser um **streaming handler** que faz yield dos deltas (ver ``handler.py`` na raiz).
+**Inferência (UI Oráculo):** usa o **proxy OpenAI** do Runpod — o mesmo contrato que o OpenWebUI —
+``POST https://api.runpod.ai/v2/{id}/openai/v1/chat/completions`` com ``model``, ``messages``, etc.
+(vê ``runpod_openai_upstream_base`` e ``ModelRuntime.generate`` / ``stream``).
+
+**Funções legadas** ``runpod_chat_complete`` / ``iter_runpod_chat_stream`` continuam a usar
+``POST /run`` + ``/status`` / ``/stream`` para workers com ``handler.py`` que esperam ``input`` agregado.
 
 Referência: https://docs.runpod.io/serverless/endpoints/operation-reference
 """
@@ -16,13 +18,51 @@ import os
 import threading
 import time
 from typing import Any, Iterator
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 
 import httpx
 
 API_BASE = "https://api.runpod.ai/v2"
 DEFAULT_POLL_INTERVAL_S = 1.0
 DEFAULT_POLL_TIMEOUT_S = 900.0
+
+
+def runpod_openai_upstream_base(endpoint_ref: str) -> str:
+    """
+    Base URL para as rotas OpenAI do Runpod (o mesmo contrato que o OpenWebUI usa):
+    ``POST {base}/v1/chat/completions``, ``GET {base}/v1/models``.
+
+    ``endpoint_ref`` é o ID do endpoint ou URL com ``/v2/{id}/`` (ex. …/openai/v1).
+    """
+    eid = parse_runpod_endpoint_id(endpoint_ref)
+    if not eid:
+        raise ValueError("Runpod: endpoint id / URL vazio.")
+    return f"{API_BASE}/{eid}/openai"
+
+
+def verify_runpod_openai_connection(endpoint_ref: str, api_key: str) -> dict[str, Any]:
+    """
+    Testa ligação ao proxy OpenAI do endpoint (GET ``/v1/models``), como o botão de verificação no OpenWebUI.
+    """
+    key = (api_key or "").strip()
+    if not key:
+        raise ValueError("API key Runpod vazia.")
+    base = runpod_openai_upstream_base(endpoint_ref)
+    url = urljoin(base.rstrip("/") + "/", "v1/models")
+    with httpx.Client(timeout=httpx.Timeout(45.0, connect=15.0)) as client:
+        r = client.get(url, headers=_headers(key))
+        r.raise_for_status()
+        data = r.json()
+    ids: list[str] = []
+    for row in data.get("data") or []:
+        if isinstance(row, dict) and row.get("id"):
+            ids.append(str(row["id"]))
+    msg = (
+        f"OK — {len(ids)} modelo(s) em /v1/models."
+        if ids
+        else "OK — endpoint respondeu; lista de modelos vazia (confirme o Model id na consola Runpod)."
+    )
+    return {"ok": True, "message": msg, "models": ids}
 
 
 def parse_runpod_endpoint_id(endpoint_ref: str) -> str:

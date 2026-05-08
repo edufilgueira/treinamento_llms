@@ -570,15 +570,18 @@
   const settingsGlobalSystemPrompt = document.getElementById("settings-global-system-prompt");
   const settingsSystemPrompt = document.getElementById("settings-system-prompt");
   const settingsNavList = document.getElementById("settings-nav-list");
-  const settingsRunpodEnabled = document.getElementById("settings-runpod-enabled");
   const settingsRunpodFields = document.getElementById("settings-runpod-fields");
   const settingsLlamaLocalFields = document.getElementById("settings-llama-local-fields");
+  const settingsModeLlama = document.getElementById("settings-mode-llama");
+  const settingsModeRunpod = document.getElementById("settings-mode-runpod");
   const settingsRunpodEndpoint = document.getElementById("settings-runpod-endpoint");
   const settingsRunpodApiKey = document.getElementById("settings-runpod-api-key");
   const settingsRunpodModel = document.getElementById("settings-runpod-model");
   const settingsRunpodPollTimeout = document.getElementById("settings-runpod-poll-timeout");
   const settingsRunpodPollInterval = document.getElementById("settings-runpod-poll-interval");
   const settingsRunpodStartupHealth = document.getElementById("settings-runpod-startup-health");
+  const settingsRunpodVerify = document.getElementById("settings-runpod-verify");
+  const settingsRunpodVerifyMsg = document.getElementById("settings-runpod-verify-msg");
   const settingsLlamaHost = document.getElementById("settings-llama-host");
   const settingsLlamaPort = document.getElementById("settings-llama-port");
   const settingsLlamaNCtx = document.getElementById("settings-llama-n-ctx");
@@ -594,8 +597,13 @@
   const settingsUiOnly = document.getElementById("settings-ui-only");
   let currentUserIsAdmin = false;
 
+  function isRunpodBackendSelected() {
+    var r = document.querySelector('input[name="settings-inference-backend"]:checked');
+    return !!(r && r.value === "runpod");
+  }
+
   function syncInferenceModeUi() {
-    const on = settingsRunpodEnabled && settingsRunpodEnabled.checked;
+    const on = isRunpodBackendSelected();
     if (settingsRunpodFields) {
       settingsRunpodFields.hidden = !on;
     }
@@ -604,8 +612,79 @@
     }
   }
 
-  if (settingsRunpodEnabled) {
-    settingsRunpodEnabled.addEventListener("change", syncInferenceModeUi);
+  document.querySelectorAll('input[name="settings-inference-backend"]').forEach(function (el) {
+    el.addEventListener("change", syncInferenceModeUi);
+  });
+
+  if (settingsRunpodVerify) {
+    settingsRunpodVerify.addEventListener("click", async function () {
+      const msgEl = settingsRunpodVerifyMsg;
+      const endpoint = settingsRunpodEndpoint ? String(settingsRunpodEndpoint.value).trim() : "";
+      const apiKey = settingsRunpodApiKey ? String(settingsRunpodApiKey.value).trim() : "";
+      if (!endpoint) {
+        if (msgEl) {
+          msgEl.textContent = "Indique a URL ou o ID do endpoint.";
+          msgEl.hidden = false;
+          msgEl.classList.remove("modal__small--ok");
+          msgEl.classList.add("modal__small--err");
+        }
+        return;
+      }
+      settingsRunpodVerify.disabled = true;
+      settingsRunpodVerify.classList.add("is-loading");
+      if (msgEl) {
+        msgEl.textContent = "A testar ligação…";
+        msgEl.hidden = false;
+        msgEl.classList.remove("modal__small--ok", "modal__small--err");
+      }
+      try {
+        const r = await apiFetch("/api/admin/runpod/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint_id: endpoint, api_key: apiKey }),
+        });
+        if (r.status === 401) {
+          window.location.href = "/login";
+          return;
+        }
+        var j = {};
+        try {
+          j = await r.json();
+        } catch (_) {}
+        if (r.status === 403) {
+          if (msgEl) {
+            msgEl.textContent = (j && j.detail) || "Apenas administrador pode testar.";
+            msgEl.hidden = false;
+            msgEl.classList.add("modal__small--err");
+            msgEl.classList.remove("modal__small--ok");
+          }
+          return;
+        }
+        if (msgEl) {
+          var line = (j && j.message) || (j && j.ok ? "OK" : "Resposta inválida.");
+          if (j && j.ok && j.models && j.models.length) {
+            line +=
+              " — modelos: " +
+              j.models.slice(0, 8).join(", ") +
+              (j.models.length > 8 ? "…" : "");
+          }
+          msgEl.textContent = line;
+          msgEl.hidden = false;
+          msgEl.classList.toggle("modal__small--ok", !!(j && j.ok));
+          msgEl.classList.toggle("modal__small--err", !(j && j.ok));
+        }
+      } catch (err) {
+        if (msgEl) {
+          msgEl.textContent = err && err.message ? String(err.message) : String(err);
+          msgEl.hidden = false;
+          msgEl.classList.add("modal__small--err");
+          msgEl.classList.remove("modal__small--ok");
+        }
+      } finally {
+        settingsRunpodVerify.disabled = false;
+        settingsRunpodVerify.classList.remove("is-loading");
+      }
+    });
   }
 
   function selectSettingsTab(tab) {
@@ -867,8 +946,14 @@
         }
         if (currentUserIsAdmin && j.runpod_server) {
           const R = j.runpod_server;
-          if (settingsRunpodEnabled) {
-            settingsRunpodEnabled.checked = !!R.serverless_enabled;
+          if (settingsModeLlama && settingsModeRunpod) {
+            if (R.serverless_enabled) {
+              settingsModeRunpod.checked = true;
+              settingsModeLlama.checked = false;
+            } else {
+              settingsModeLlama.checked = true;
+              settingsModeRunpod.checked = false;
+            }
           }
           if (settingsRunpodEndpoint) {
             settingsRunpodEndpoint.value = R.endpoint_id != null ? String(R.endpoint_id) : "";
@@ -987,7 +1072,7 @@
         ? parseInt(String(settingsRunpodPollInterval.value), 10)
         : 1;
       body.runpod = {
-        serverless_enabled: !!(settingsRunpodEnabled && settingsRunpodEnabled.checked),
+        serverless_enabled: isRunpodBackendSelected(),
         endpoint_id: settingsRunpodEndpoint ? String(settingsRunpodEndpoint.value).trim() : "",
         model_id: settingsRunpodModel ? String(settingsRunpodModel.value).trim() || "runpod" : "runpod",
         poll_timeout_s: isNaN(rpTo) ? 900 : rpTo,

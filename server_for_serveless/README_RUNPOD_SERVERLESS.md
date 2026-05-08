@@ -63,7 +63,9 @@ Opcional: *startup health* (admin ou `ORACULO_RUNPOD_STARTUP_HEALTH`) faz `runpo
 
 ## 3. Padrão de comunicação com a API Runpod (inferência)
 
-O cliente está em `inference/runpod_upstream.py`.
+**Oráculo (UI chat):** o backend usa o **mesmo proxy OpenAI** que o OpenWebUI — `POST https://api.runpod.ai/v2/{endpoint_id}/openai/v1/chat/completions` com `Authorization: Bearer`, campo `model` (o «Model id» nas configurações) e `messages`, etc. A implementação reutiliza `llama_server_upstream.chat_completions_*` com base `…/openai` (`runpod_openai_upstream_base`).
+
+O cliente está em `inference/runpod_upstream.py` (funções legadas abaixo ainda usam `/run` para workers com `handler.py` personalizado).
 
 ### Resposta completa (chat sem `stream`, ou `generate()`)
 
@@ -89,8 +91,8 @@ Se `/stream` falhar (worker antigo), aparece erro a pedir **rebuild da imagem Do
 | Modo | Comportamento |
 |------|----------------|
 | **llama-server HTTP** | `chat_completions_stream_deltas`: SSE direto do llama-server. |
-| **Runpod** | `iter_runpod_chat_stream`: SSE do llama-server **dentro do worker** → Runpod `/stream` → Oráculo → cliente. Os pedaços correspondem aos **deltas do modelo** (tokens / subpalavras), não a uma simulação após texto completo. |
-| **Runpod, pedido sem stream** | `runpod_chat_complete` usa só `/status` após `/run`. |
+| **Runpod** | `chat_completions_stream_deltas` / `chat_completions_complete` para `…/openai/v1` (proxy OpenAI); em paralelo existem `iter_runpod_chat_stream` / `runpod_chat_complete` (`/run` + `/status`) para workers legados. |
+| **Runpod, pedido sem stream** | Completar vía `…/openai/v1/chat/completions` sem `stream`, ou (legado) `runpod_chat_complete` com `/status` após `/run`. |
 
 Cancelar no cliente (`cancel_event`) solicita **`POST .../cancel/{job_id}`** no Runpod e interrompe a leitura do stream.
 

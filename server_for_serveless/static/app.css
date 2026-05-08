@@ -2330,6 +2330,139 @@ body.auth-page {
   color: var(--text-secondary);
 }
 
+.modal__small--verify {
+  margin: 0.25rem 0 0.65rem;
+}
+
+.modal__small--ok {
+  color: #7dcea0;
+}
+
+.modal__small--err {
+  color: #f1948a;
+}
+
+.modal__label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.modal__label-row .modal__label {
+  margin-bottom: 0;
+}
+
+.modal__label-hint {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.modal__input-with-action {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 0.65rem;
+}
+
+.modal__input--flex {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
+.btn-runpod-verify {
+  flex-shrink: 0;
+  width: 2.5rem;
+  min-height: 2.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-secondary);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.btn-runpod-verify:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.btn-runpod-verify:disabled,
+.btn-runpod-verify.is-loading {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.settings-connect-mode {
+  border: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  min-width: 0;
+}
+
+.settings-connect-mode__legend {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 0.45rem;
+  padding: 0;
+}
+
+.settings-connect-mode__opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.55rem 0.65rem;
+  margin-bottom: 0.4rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.settings-connect-mode__opt:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.settings-connect-mode__opt:has(input:checked) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.settings-connect-mode__opt input[type="radio"] {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+}
+
+.settings-connect-mode__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.settings-connect-mode__title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-connect-mode__desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
 .modal__input,
 .modal__textarea {
   width: 100%;
