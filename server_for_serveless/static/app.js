@@ -567,10 +567,9 @@
   const profileLoginLine = document.getElementById("profile-login-line");
   const settingsModalHint = document.getElementById("settings-modal-hint");
   const settingsBlockGlobal = document.getElementById("settings-block-global");
-  const settingsBlockRuntime = document.getElementById("settings-block-runtime");
   const settingsGlobalSystemPrompt = document.getElementById("settings-global-system-prompt");
   const settingsSystemPrompt = document.getElementById("settings-system-prompt");
-  const settingsBlockLlama = document.getElementById("settings-block-llama");
+  const settingsNavList = document.getElementById("settings-nav-list");
   const settingsRunpodEnabled = document.getElementById("settings-runpod-enabled");
   const settingsRunpodFields = document.getElementById("settings-runpod-fields");
   const settingsLlamaLocalFields = document.getElementById("settings-llama-local-fields");
@@ -607,6 +606,30 @@
 
   if (settingsRunpodEnabled) {
     settingsRunpodEnabled.addEventListener("change", syncInferenceModeUi);
+  }
+
+  function selectSettingsTab(tab) {
+    const root = modalSettings || document;
+    root.querySelectorAll(".settings-nav__btn[data-settings-tab]").forEach(function (btn) {
+      const t = btn.getAttribute("data-settings-tab");
+      if (!t) return;
+      const on = t === tab;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    root.querySelectorAll(".settings-panel").forEach(function (pan) {
+      const id = pan.id.replace("settings-panel-", "");
+      pan.hidden = id !== tab;
+    });
+  }
+
+  if (settingsNavList) {
+    settingsNavList.addEventListener("click", function (e) {
+      const btn = e.target.closest("[data-settings-tab]");
+      if (!btn || !settingsNavList.contains(btn) || btn.hidden) return;
+      const t = btn.getAttribute("data-settings-tab");
+      if (t) selectSettingsTab(t);
+    });
   }
 
   function isAdminFromApi(v) {
@@ -757,9 +780,6 @@
     if (settingsBlockGlobal) {
       settingsBlockGlobal.hidden = true;
     }
-    if (settingsBlockLlama) {
-      settingsBlockLlama.hidden = true;
-    }
     try {
       const r = await apiFetch("/api/user/settings", { method: "GET" });
       if (r.status === 401) {
@@ -777,19 +797,16 @@
         if (settingsBlockGlobal) {
           settingsBlockGlobal.hidden = !currentUserIsAdmin;
         }
-        if (settingsBlockRuntime) {
-          settingsBlockRuntime.hidden = !currentUserIsAdmin;
-        }
-        if (settingsBlockLlama) {
-          settingsBlockLlama.hidden = !currentUserIsAdmin;
-        }
+        document.querySelectorAll(".settings-nav__btn.admin-settings-nav").forEach(function (btn) {
+          btn.hidden = !currentUserIsAdmin;
+        });
         if (settingsModalHint) {
           if (currentUserIsAdmin) {
             settingsModalHint.textContent =
-              "Como administrador: prompt global, comportamento do serviço (fila, só interface), prompt pessoal, e na secção abaixo parâmetros de geração e escolha Runpod vs llama-server local; ao guardar, o backend de inferência recarrega.";
+              "Personalização: prompt global (todos) e o teu system prompt. Nos outros itens do menu: modelo, parâmetros de geração e comportamento global do serviço. Ao guardar, o backend de inferência recarrega.";
           } else {
             settingsModalHint.textContent =
-              "Ajusta o teu system prompt; ele junta-se ao prompt global do serviço em cada geração. Os parâmetros do modelo são fixos na conta de utilizador.";
+              "Ajusta o teu system prompt; ele junta-se ao prompt global do serviço em cada geração. Os parâmetros do modelo são configurados pelo administrador.";
           }
         }
         if (settingsSystemPrompt) {
@@ -872,6 +889,7 @@
         }
       }
     } catch (_) {}
+    selectSettingsTab("personal");
     if (modalSettings) {
       modalSettings.hidden = false;
     }
