@@ -53,6 +53,7 @@ from server_for_serveless.db.chat_sessions_db import (
     should_generate_title,
 )
 from server_for_serveless.inference.bootstrap import load_inference_backend
+from server_for_serveless.inference.inference_backend import inference_backend_for_runtime
 from server_for_serveless.inference.runtime import (
     cross_user_ui_block_enabled,
     get_runtime,
@@ -348,6 +349,7 @@ def _job_worker(
                     return
                 _jobs[job_id]["text"] += delta
         t1 = time.perf_counter()
+        ib = inference_backend_for_runtime(rt)
         with _jobs_lock:
             if job_id not in _jobs:
                 return
@@ -365,6 +367,7 @@ def _job_worker(
                 j["status"] = "cancelled"
             else:
                 j["status"] = "done"
+            j["inference_backend"] = ib
             is_done = j["status"] == "done" and not j["cancel_event"].is_set()
             asst_text = (j.get("text") or "") if is_done else ""
             persist_toks = toks
@@ -384,6 +387,7 @@ def _job_worker(
                 output_tokens=persist_toks,
                 gen_seconds=persist_sec,
                 tokens_per_sec=persist_tps,
+                inference_backend=ib,
             ):
                 u_pl = plain_for_storage(last_u)
                 a_pl = plain_for_storage(asst_text)
@@ -943,6 +947,7 @@ async def get_chat_job(_uid: UserIdDep, job_id: str):
         output_tokens=j.get("output_tokens"),
         gen_seconds=j.get("gen_seconds"),
         tokens_per_sec=j.get("tokens_per_sec"),
+        inference_backend=j.get("inference_backend"),
     )
 
 

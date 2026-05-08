@@ -51,6 +51,7 @@ class JobStateOut(BaseModel):
     output_tokens: int | None = None
     gen_seconds: float | None = None
     tokens_per_sec: float | None = None
+    inference_backend: str | None = None
 
 
 class SessionTitleUpdate(BaseModel):

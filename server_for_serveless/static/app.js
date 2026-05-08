@@ -1238,12 +1238,24 @@
   const MSG_STAT_SVG_TPS =
     '<svg class="msg__stat-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"/><path d="M6 20a8 6 0 0 1 12 0"/><path d="M12 10V6"/><path d="M12 10l3 2"/></svg>';
 
+  const MSG_STAT_SVG_SRC =
+    '<svg class="msg__stat-ico" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><path d="M6 18h12"/><path d="M12 12v6"/></svg>';
+
   function formatGenSec(s) {
     if (s == null || !Number.isFinite(Number(s)) || Number(s) < 0) {
       return "—";
     }
     const n = Number(s);
     return n.toFixed(1).replace(/\.0$/, "") + "s";
+  }
+
+  /** Rótulo curto para valores de inference_backend da API. */
+  function inferenceBackendLabel(ib) {
+    if (ib == null || ib === "") return null;
+    const k = String(ib);
+    if (k === "llama_server") return "Local";
+    if (k === "runpod_serverless") return "Runpod";
+    return k;
   }
 
   function createAssistantStatsEl() {
@@ -1265,22 +1277,26 @@
     root.appendChild(line(MSG_STAT_SVG_TOKENS, "tok"));
     root.appendChild(line(MSG_STAT_SVG_CLOCK, "sec"));
     root.appendChild(line(MSG_STAT_SVG_TPS, "tps"));
+    root.appendChild(line(MSG_STAT_SVG_SRC, "src"));
     return root;
   }
 
   function setAssistantGenStats(root, st) {
     if (!root) return;
     if (!st) return;
+    const label = inferenceBackendLabel(st.inference_backend);
     const has =
       (st.output_tokens != null && st.output_tokens !== undefined) ||
       (st.gen_seconds != null && st.gen_seconds !== undefined) ||
-      (st.tokens_per_sec != null && st.tokens_per_sec !== undefined);
+      (st.tokens_per_sec != null && st.tokens_per_sec !== undefined) ||
+      label != null;
     if (!has) return;
     root.classList.remove("msg__stats--empty");
     root.setAttribute("aria-hidden", "false");
     const tok = root.querySelector('.msg__stat-val[data-m="tok"]');
     const sec = root.querySelector('.msg__stat-val[data-m="sec"]');
     const tps = root.querySelector('.msg__stat-val[data-m="tps"]');
+    const src = root.querySelector('.msg__stat-val[data-m="src"]');
     if (st.output_tokens != null && st.output_tokens !== undefined) {
       if (tok) tok.textContent = String(st.output_tokens) + " tokens";
     } else if (tok) {
@@ -1295,6 +1311,9 @@
       if (tps) tps.textContent = Number(st.tokens_per_sec).toFixed(2) + " t/s";
     } else if (tps) {
       tps.textContent = "—";
+    }
+    if (src) {
+      src.textContent = label != null ? label : "—";
     }
   }
 
@@ -1667,6 +1686,7 @@
                 output_tokens: m.output_tokens,
                 gen_seconds: m.gen_seconds,
                 tokens_per_sec: m.tokens_per_sec,
+                inference_backend: m.inference_backend,
               }
             : null;
         appendMessage(m.role, m.content, genStats);

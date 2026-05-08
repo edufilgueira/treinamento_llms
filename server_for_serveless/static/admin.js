@@ -303,11 +303,20 @@
   }
 
   function appendAssistantStatsBar(stack, m) {
-    if (
-      m.output_tokens == null &&
-      m.gen_seconds == null &&
-      m.tokens_per_sec == null
-    ) {
+    const hasStats =
+      m.output_tokens != null ||
+      m.gen_seconds != null ||
+      m.tokens_per_sec != null;
+    const srcLabel =
+      m.inference_backend != null && m.inference_backend !== ""
+        ? (function () {
+            var ib = String(m.inference_backend);
+            if (ib === "llama_server") return "Local";
+            if (ib === "runpod_serverless") return "Runpod";
+            return ib;
+          })()
+        : null;
+    if (!hasStats && !srcLabel) {
       return;
     }
     const bar = document.createElement("div");
@@ -326,6 +335,9 @@
     }
     if (m.tokens_per_sec != null) {
       parts.push(Number(m.tokens_per_sec).toFixed(2) + " t/s");
+    }
+    if (srcLabel) {
+      parts.push(srcLabel);
     }
     const line = document.createElement("span");
     line.className = "msg__stat";

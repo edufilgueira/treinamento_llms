@@ -270,6 +270,13 @@ def _ensure_chat_stats_columns(cur: Any) -> None:
             ADD COLUMN admin_reviewed SMALLINT NOT NULL DEFAULT 0
             """
         )
+    if "inference_backend" not in have_m:
+        cur.execute(
+            """
+            ALTER TABLE chat_messages
+            ADD COLUMN inference_backend VARCHAR(32) NULL
+            """
+        )
 
 
 def _ensure_app_global_llama_columns(cur: Any) -> None:

@@ -8,6 +8,8 @@ import re
 import threading
 from typing import Any
 
+from server_for_serveless.inference.inference_backend import normalize_inference_backend
+
 from .pg_db import get_connection, init_schema
 
 _db_lock = threading.Lock()
@@ -151,7 +153,7 @@ def get_session_messages(
                     cur.execute(
                         """
                         SELECT id, role, content, output_tokens, gen_seconds,
-                               tokens_per_sec, COALESCE(admin_reviewed, 0)
+                               tokens_per_sec, inference_backend, COALESCE(admin_reviewed, 0)
                         FROM chat_messages
                         WHERE session_id = %s
                         ORDER BY pos ASC, id ASC
@@ -161,7 +163,8 @@ def get_session_messages(
                 else:
                     cur.execute(
                         """
-                        SELECT role, content, output_tokens, gen_seconds, tokens_per_sec
+                        SELECT role, content, output_tokens, gen_seconds, tokens_per_sec,
+                               inference_backend
                         FROM chat_messages
                         WHERE session_id = %s
                         ORDER BY pos ASC, id ASC
@@ -183,7 +186,7 @@ def get_session_messages(
                 "id": int(r[0]),
                 "role": role,
                 "content": str(r[2]),
-                "admin_reviewed": bool(int(r[6] or 0)),
+                "admin_reviewed": bool(int(r[7] or 0)),
             }
             if role == "assistant":
                 if r[3] is not None:
@@ -192,6 +195,8 @@ def get_session_messages(
                     d["gen_seconds"] = float(r[4])
                 if r[5] is not None:
                     d["tokens_per_sec"] = float(r[5])
+                if r[6]:
+                    d["inference_backend"] = str(r[6])
             msg_list.append(d)
     else:
         for r in rows:
@@ -203,6 +208,8 @@ def get_session_messages(
                     d["gen_seconds"] = float(r[3])
                 if r[4] is not None:
                     d["tokens_per_sec"] = float(r[4])
+                if r[5]:
+                    d["inference_backend"] = str(r[5])
             msg_list.append(d)
     return (msg_list, title, session_meta)
 
@@ -261,11 +268,13 @@ def append_turn(
     output_tokens: int | None = None,
     gen_seconds: float | None = None,
     tokens_per_sec: float | None = None,
+    inference_backend: str | None = None,
 ) -> bool:
     if not _owns(user_id, session_id):
         return False
     user_text = user_text or ""
     assistant_text = assistant_text or ""
+    ib = normalize_inference_backend(inference_backend)
     add_tok = int(output_tokens) if output_tokens is not None else 0
     add_sec = float(gen_seconds) if gen_seconds is not None else 0.0
     with _db_lock:
@@ -283,9 +292,9 @@ def append_turn(
                         """
                         INSERT INTO chat_messages (
                             session_id, role, content, pos,
-                            output_tokens, gen_seconds, tokens_per_sec
+                            output_tokens, gen_seconds, tokens_per_sec, inference_backend
                         )
-                        VALUES (%s, 'user', %s, %s, NULL, NULL, NULL)
+                        VALUES (%s, 'user', %s, %s, NULL, NULL, NULL, NULL)
                         """,
                         (session_id, user_text, base),
                     )
@@ -293,9 +302,9 @@ def append_turn(
                         """
                         INSERT INTO chat_messages (
                             session_id, role, content, pos,
-                            output_tokens, gen_seconds, tokens_per_sec
+                            output_tokens, gen_seconds, tokens_per_sec, inference_backend
                         )
-                        VALUES (%s, 'assistant', %s, %s, %s, %s, %s)
+                        VALUES (%s, 'assistant', %s, %s, %s, %s, %s, %s)
                         """,
                         (
                             session_id,
@@ -304,6 +313,7 @@ def append_turn(
                             output_tokens,
                             gen_seconds,
                             tokens_per_sec,
+                            ib,
                         ),
                     )
                     if output_tokens is not None or gen_seconds is not None:
