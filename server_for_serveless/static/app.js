@@ -609,6 +609,10 @@
   }
 
   function selectSettingsTab(tab) {
+    var isAdminTab = tab === "connect" || tab === "generate" || tab === "service";
+    if (isAdminTab && !currentUserIsAdmin) {
+      tab = "personal";
+    }
     const root = modalSettings || document;
     root.querySelectorAll(".settings-nav__btn[data-settings-tab]").forEach(function (btn) {
       const t = btn.getAttribute("data-settings-tab");
@@ -619,6 +623,10 @@
     });
     root.querySelectorAll(".settings-panel").forEach(function (pan) {
       const id = pan.id.replace("settings-panel-", "");
+      if ((id === "connect" || id === "generate" || id === "service") && !currentUserIsAdmin) {
+        pan.hidden = true;
+        return;
+      }
       pan.hidden = id !== tab;
     });
   }
@@ -797,9 +805,6 @@
         if (settingsBlockGlobal) {
           settingsBlockGlobal.hidden = !currentUserIsAdmin;
         }
-        document.querySelectorAll(".settings-nav__btn.admin-settings-nav").forEach(function (btn) {
-          btn.hidden = !currentUserIsAdmin;
-        });
         if (settingsModalHint) {
           if (currentUserIsAdmin) {
             settingsModalHint.textContent =

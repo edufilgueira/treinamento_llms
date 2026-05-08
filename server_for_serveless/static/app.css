@@ -2154,6 +2154,11 @@ body.auth-page {
   color: var(--text);
 }
 
+/* .settings-nav__btn usa display:flex — sem isto o [hidden] deixa de esconder o separador */
+.modal__panel--settings .settings-nav__btn[hidden] {
+  display: none !important;
+}
+
 .settings-nav__btn.is-active {
   background: rgba(255, 255, 255, 0.1);
   color: var(--text);
