@@ -47,11 +47,11 @@ docker login -u edufilgueira
 docker tag kiaia-server:cuda edufilgueira/kiaia-server:cuda
 docker push edufilgueira/kiaia-server:cuda
 
-docker tag kiaia-server:cuda IP:5000/kiaia-server:cuda
-docker push 
+docker tag kiaia-server:cuda 187.77.44.167:5000/kiaia-server:cuda
+docker push 187.77.44.167:5000/kiaia-server:cuda
 
 registry.okiaia.com/kiaia-server:cuda
-http://IP:5000/v2/_catalog
+http://187.77.44.167:5000/v2/_catalog
 ```
 
 

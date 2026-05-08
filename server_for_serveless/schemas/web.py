@@ -93,7 +93,7 @@ class LlamaServerSettingsOut(BaseModel):
 
 class RunpodServerSettingsIn(BaseModel):
     serverless_enabled: bool | None = None
-    endpoint_id: str | None = Field(None, max_length=512)
+    endpoint_id: str | None = Field(None, max_length=2048)
     api_key: str | None = Field(None, max_length=1024)  # vazio no PATCH = não alterar
     model_id: str | None = Field(None, max_length=128)
     poll_timeout_s: int | None = Field(None, ge=30, le=86_400)

@@ -48,7 +48,7 @@ Variáveis úteis no `.env` (fall-back ou só `.env` sem preencher admin; ver ta
 
 | Variável | Função |
 |----------|--------|
-| `ORACULO_RUNPOD_ENDPOINT_ID` | ID do endpoint Serverless no painel Runpod |
+| `ORACULO_RUNPOD_ENDPOINT_ID` | ID do endpoint (ex. `m9go…`) **ou** URL `https://api.runpod.ai/v2/{id}/…` (extrai-se o ID) |
 | `ORACULO_RUNPOD_API_KEY` | Chave `rpa_...` (API) |
 | `ORACULO_RUNPOD_MODEL_ID` | Nome do modelo exposto em `/v1/models` (ex.: `runpod`) |
 | `ORACULO_RUNPOD_POLL_TIMEOUT_S` | Tempo máximo à espera do job (omissão 900 s) |

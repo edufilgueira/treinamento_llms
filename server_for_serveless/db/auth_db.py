@@ -532,7 +532,7 @@ def set_runpod_server_settings(
     en = bool(serverless_enabled) if serverless_enabled is not None else bool(st["serverless_enabled"])
     eid = (
         (endpoint_id.strip() if endpoint_id is not None else st["endpoint_id"]) or ""
-    )[:512]
+    )[:2048]
     key = st["api_key"]
     if api_key is not None:
         t = (api_key or "").strip()
@@ -548,6 +548,11 @@ def set_runpod_server_settings(
     if pis < 1 or pis > 120:
         raise ValueError("Runpod: intervalo de polling (s) entre 1 e 120.")
     sh = bool(startup_health) if startup_health is not None else bool(st["startup_health"])
+
+    if en and eid:
+        from server_for_serveless.inference.runpod_upstream import parse_runpod_endpoint_id
+
+        parse_runpod_endpoint_id(eid)
 
     llama_align = 0 if en else 1
     with _db_lock:

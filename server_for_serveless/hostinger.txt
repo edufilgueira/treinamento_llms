@@ -5,6 +5,7 @@ ssh root@187.77.44.167
 scp merged_qwen3-8B.z02 root@187.77.44.167:/root/treinamento_llms/trein/outputs
 
 scp root@HOST:/root/treinamento_llms/trein/outputs/lora_adapter.zip ./
+scp root@187.77.44.167:/root/treinamento_llms/trein/outputs/merged_qwen3-8B/model.safetensors ./
 
 segundo plano
 nohup ./server_for_serveless/serve.sh > app.log 2>&1 &

@@ -16,12 +16,65 @@ import os
 import threading
 import time
 from typing import Any, Iterator
+from urllib.parse import unquote, urlparse
 
 import httpx
 
 API_BASE = "https://api.runpod.ai/v2"
 DEFAULT_POLL_INTERVAL_S = 1.0
 DEFAULT_POLL_TIMEOUT_S = 900.0
+
+
+def parse_runpod_endpoint_id(endpoint_ref: str) -> str:
+    """
+    Aceita só o ID (ex. ``m9gozjpd6mtfql``) ou URL / path Runpod
+    (ex. ``https://api.runpod.ai/v2/m9gozjpd6mtfql/openai/v1``).
+    Devolve o segmento usado em ``https://api.runpod.ai/v2/{id}/run``, etc.
+    """
+    s = (endpoint_ref or "").strip()
+    if not s:
+        return ""
+    low = s.lower()
+
+    def _from_segments(segments: list[str]) -> str:
+        for i, seg in enumerate(segments):
+            if seg.lower() == "v2" and i + 1 < len(segments):
+                return segments[i + 1]
+        return ""
+
+    # Só ID (sem path tipo URL)
+    if "/" not in s and "://" not in s:
+        return s
+
+    if low.startswith("v2/"):
+        parts = [p for p in s.split("/") if p]
+        return parts[1] if len(parts) > 1 else ""
+
+    href = s
+    if "://" not in href:
+        tl = href.lstrip("/")
+        if "runpod.ai" in low and "/" in tl:
+            href = "https://" + tl
+
+    if "://" in href:
+        u = urlparse(href)
+        segs = [unquote(x) for x in u.path.split("/") if x]
+        got = _from_segments(segs)
+        if got:
+            return got
+        raise ValueError(
+            "Runpod: não encontrei /v2/{endpoint_id}/ na URL — usa o ID ou algo como "
+            "https://api.runpod.ai/v2/SEU_ID/openai/v1"
+        )
+
+    # Path relativo: /v2/id/... ou v2/id/...
+    segs = [x for x in s.split("/") if x]
+    got = _from_segments(segs)
+    if got:
+        return got
+    raise ValueError(
+        "Runpod: endpoint inválido — coloca o ID (ex. m9gozjpd6mtfql) ou URL com /v2/{id}/"
+    )
 
 
 def _headers(api_key: str) -> dict[str, str]:
@@ -165,7 +218,7 @@ def _poll_runpod_job_output(
     timeout_s: float,
 ) -> tuple[str, dict[str, int] | None]:
     """Espera por ``COMPLETED`` e devolve texto + usage (``GET /status``)."""
-    eid = (endpoint_id or "").strip()
+    eid = parse_runpod_endpoint_id(endpoint_id)
     key = (api_key or "").strip()
     status_url = f"{API_BASE}/{eid}/status/{job_id}"
     deadline = time.monotonic() + max(15.0, float(timeout_s))
@@ -226,7 +279,10 @@ def iter_runpod_chat_stream(
     fall-back para o mesmo job com ``GET /status`` (saída agregada), como no chat
     não-stream — evita resposta vazia e 0 tokens na UI.
     """
-    eid = (endpoint_id or "").strip()
+    try:
+        eid = parse_runpod_endpoint_id(endpoint_id)
+    except ValueError:
+        raise
     if not eid:
         raise ValueError("endpoint_id Runpod vazio.")
     key = (api_key or "").strip()
@@ -352,7 +408,10 @@ def runpod_chat_complete(
     """
     Executa uma geração vía Runpod e devolve (texto, usage|None).
     """
-    eid = (endpoint_id or "").strip()
+    try:
+        eid = parse_runpod_endpoint_id(endpoint_id)
+    except ValueError:
+        raise
     if not eid:
         raise ValueError("endpoint_id Runpod vazio.")
     key = (api_key or "").strip()
@@ -405,7 +464,9 @@ def runpod_chat_complete(
 
 def runpod_endpoint_health(endpoint_id: str, api_key: str) -> dict[str, Any]:
     """Verificação rápida no arranque (opcional)."""
-    eid = (endpoint_id or "").strip()
+    eid = parse_runpod_endpoint_id(endpoint_id)
+    if not eid:
+        raise ValueError("endpoint_id Runpod vazio.")
     key = (api_key or "").strip()
     url = f"{API_BASE}/{eid}/health"
     with httpx.Client(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
