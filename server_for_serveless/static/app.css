@@ -1136,10 +1136,14 @@ body.menu-open {
 }
 .msg__text--md thead th {
   font-weight: 600;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.18);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
 }
 .msg__text--md tbody th {
   font-weight: 600;
+}
+.msg__text--md tbody tr:last-child th,
+.msg__text--md tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .msg__text--md hr {
