@@ -12,6 +12,31 @@ nohup ./server_for_serveless/serve.sh > app.log 2>&1 &
 nohup ./server_for_serveless/serve_maintenance.sh > app.log 2>&1 &
 
 
+install
+pip install -q huggingface_hub
+
+subir vLLM
+https://huggingface.co/marcusdias/kiaia-v1-awq
+
+imagem
+runpod/worker-v1-vllm:v2.18.1
+
+download hf
+HF_HUB_DISABLE_XET=1 hf download marcusdias/kiaia-v1-awq --local-dir /workspace/kiaia-v1-awq
+
+enviroments
+MODEL_NAME=/runpod-volume/kiaia-v1-awq
+QUANTIZATION=compressed-tensors
+MAX_MODEL_LEN=8192
+GPU_MEMORY_UTILIZATION=0.95
+TRUST_REMOTE_CODE=1
+
+
+criar modelo via POD
+pip install huggingface_hub llmcompressor transformers accelerate
+HF_HUB_DISABLE_XET=1 hf download marcusdias/kiaia-v1-awq --local-dir /tmp/kiaia-v1-awq
+
+
 ps aux | grep python
 
 tail -f ~/treinamento_llms/app.log

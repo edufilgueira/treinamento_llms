@@ -1,3 +1,6 @@
+15172 tokens · 599.5s · 25.31 t/s
+10.82 - 10.65 = 0,17
+
 https://github.com/ggerganov/llama.cpp
 
 

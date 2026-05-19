@@ -1116,27 +1116,30 @@ body.menu-open {
   border-collapse: collapse;
   margin: 0.6em 0;
   font-size: 0.9em;
-  border-radius: 0.45rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: none;
+  border-radius: 0;
   display: table;
-  overflow: hidden;
+  background: transparent;
 }
 
 .msg__text--md thead {
-  background: rgba(255, 255, 255, 0.06);
+  background: transparent;
 }
 .msg__text--md th,
 .msg__text--md td {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   padding: 0.4rem 0.55rem;
   text-align: left;
   vertical-align: top;
+  background: transparent;
 }
-.msg__text--md th {
+.msg__text--md thead th {
   font-weight: 600;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.18);
 }
-.msg__text--md tbody tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.03);
+.msg__text--md tbody th {
+  font-weight: 600;
 }
 
 .msg__text--md hr {
