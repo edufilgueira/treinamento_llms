@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Voice Orb</title>
+
+<style>
+
+:root{
+    --orb-size: min(72vw, 520px);
+    --dot-size: min(4vw, 28px);
+}
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+
+    user-select:none;
+    -webkit-user-select:none;
+    -webkit-touch-callout:none;
+    -webkit-tap-highlight-color:transparent;
+}
+
+html,
+body{
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:#000;
+}
+
+body{
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    touch-action:manipulation;
+}
+
+/* =====================================================
+   ORB
+===================================================== */
+
+.orb{
+
+    position:relative;
+
+    width:var(--orb-size);
+    height:var(--orb-size);
+
+    border-radius:50%;
+
+    border:3px solid rgba(255,255,255,.95);
+}
+
+/* =====================================================
+   CENTRO
+===================================================== */
+
+.core{
+
+    position:absolute;
+
+    left:50%;
+    top:50%;
+
+    width:var(--dot-size);
+    height:var(--dot-size);
+
+    border-radius:50%;
+
+    background:#fff;
+
+    transform:translate(-50%,-50%);
+
+    box-shadow:
+        0 0 8px rgba(255,255,255,.95),
+        0 0 20px rgba(255,255,255,.35);
+
+    z-index:100;
+}
+
+.core.single-pulse{
+    animation:pulseOnce .55s ease-in-out;
+}
+
+.core.speaking{
+    animation:pulseLoop .8s ease-in-out infinite;
+}
+
+@keyframes pulseOnce{
+
+    0%{
+        transform:translate(-50%,-50%) scale(1);
+    }
+
+    50%{
+        transform:translate(-50%,-50%) scale(1.22);
+    }
+
+    100%{
+        transform:translate(-50%,-50%) scale(1);
+    }
+
+}
+
+@keyframes pulseLoop{
+
+    0%{
+        transform:translate(-50%,-50%) scale(1);
+    }
+
+    50%{
+        transform:translate(-50%,-50%) scale(1.12);
+    }
+
+    100%{
+        transform:translate(-50%,-50%) scale(1);
+    }
+
+}
+
+/* =====================================================
+   ONDAS
+===================================================== */
+
+.wave{
+
+    position:absolute;
+
+    left:50%;
+    top:50%;
+
+    width:20px;
+    height:20px;
+
+    border-radius:50%;
+
+    border:2px solid white;
+
+    transform:translate(-50%,-50%);
+
+    pointer-events:none;
+}
+
+</style>
+</head>
+<body>
+
+<div class="orb" id="orb">
+
+    <div class="core" id="core"></div>
+
+</div>
+
+<script>
+
+/* =====================================================
+   CONFIGURAÇÕES
+===================================================== */
+
+/*
+Velocidade da fala
+
+1 = lento
+2 = normal
+3 = rápido
+5 = muito rápido
+*/
+
+let pulso = 1;
+
+/*
+Simulação de volume
+
+0.0 a 1.0
+*/
+
+let volume = 0.5;
+
+/*
+Distância máxima da onda
+
+100 = toca a borda
+50 = metade
+25 = um quarto
+*/
+
+let alcanceOnda = 60;
+
+/*
+Opacidade inicial da onda
+
+0.00 a 1.00
+*/
+
+let opacidadeInicialOnda = 0.15;
+
+/* =====================================================
+   ESTADO
+===================================================== */
+
+let speaking = false;
+
+let animacaoEmAndamento = false;
+let estadoDesejado = false;
+
+let pulseScheduler = null;
+let volumeScheduler = null;
+
+const orb = document.getElementById("orb");
+const core = document.getElementById("core");
+
+/* =====================================================
+   TAP
+===================================================== */
+
+document.addEventListener(
+    "pointerdown",
+    handleTap,
+    { passive:false }
+);
+
+function handleTap(e){
+
+    e.preventDefault();
+
+    estadoDesejado = !estadoDesejado;
+
+    if(animacaoEmAndamento){
+        return;
+    }
+
+    processarTroca();
+}
+
+/* =====================================================
+   FILA DE COMANDOS
+===================================================== */
+
+function processarTroca(){
+
+    animacaoEmAndamento = true;
+
+    triggerSinglePulse();
+
+    createWave();
+
+    setTimeout(() => {
+
+        speaking = estadoDesejado;
+
+        if(speaking){
+
+            core.classList.add("speaking");
+
+            startSpeaking();
+
+        }else{
+
+            core.classList.remove("speaking");
+
+            stopSpeaking();
+
+        }
+
+        animacaoEmAndamento = false;
+
+        if(speaking !== estadoDesejado){
+
+            processarTroca();
+
+        }
+
+    }, 550);
+}
+
+/* =====================================================
+   PULSO ÚNICO
+===================================================== */
+
+function triggerSinglePulse(){
+
+    core.classList.remove("single-pulse");
+
+    void core.offsetWidth;
+
+    core.classList.add("single-pulse");
+}
+
+/* =====================================================
+   START
+===================================================== */
+
+function startSpeaking(){
+
+    stopSpeaking();
+
+    simulateVolume();
+
+    scheduleNextWave();
+}
+
+/* =====================================================
+   STOP
+===================================================== */
+
+function stopSpeaking(){
+
+    clearTimeout(pulseScheduler);
+    clearTimeout(volumeScheduler);
+
+    pulseScheduler = null;
+    volumeScheduler = null;
+}
+
+/* =====================================================
+   VOLUME SIMULADO
+===================================================== */
+
+function simulateVolume(){
+
+    if(!speaking){
+        return;
+    }
+
+    volume =
+        0.15 +
+        Math.random() * 0.85;
+
+    volumeScheduler = setTimeout(
+
+        simulateVolume,
+
+        150 + Math.random() * 500
+
+    );
+}
+
+/* =====================================================
+   AGENDAMENTO DAS ONDAS
+===================================================== */
+
+function scheduleNextWave(){
+
+    if(!speaking){
+        return;
+    }
+
+    const minDelay = 900 / pulso;
+    const maxDelay = 1800 / pulso;
+
+    const delay =
+        Math.random() *
+        (maxDelay - minDelay)
+        + minDelay;
+
+    pulseScheduler = setTimeout(() => {
+
+        createWave();
+
+        scheduleNextWave();
+
+    }, delay);
+}
+
+/* =====================================================
+   CRIAR ONDA
+===================================================== */
+
+function createWave(){
+
+    const wave = document.createElement("div");
+
+    wave.className = "wave";
+
+    orb.appendChild(wave);
+
+    const orbSize = orb.clientWidth;
+
+    const targetSize =
+        orbSize *
+        (alcanceOnda / 100);
+
+    const opacity =
+        opacidadeInicialOnda *
+        (0.6 + volume * 0.4);
+
+    const duration =
+        900 +
+        (volume * 1200);
+
+    wave.animate(
+    [
+        {
+            width:"20px",
+            height:"20px",
+            opacity:opacity
+        },
+
+        {
+            opacity:opacity * 0.45,
+            offset:0.7
+        },
+
+        {
+            width:targetSize + "px",
+            height:targetSize + "px",
+            opacity:0
+        }
+    ],
+    {
+        duration:duration,
+        easing:"ease-out"
+    });
+
+    setTimeout(() => {
+
+        wave.remove();
+
+    }, duration);
+}
+
+</script>
+
+</body>
+</html>

@@ -17,3 +17,4 @@ server/data/.session_secret
 .env
 tools/
 server/.env
+huggingface.txt

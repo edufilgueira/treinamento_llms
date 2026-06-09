@@ -20,7 +20,7 @@ kill -9 <PID>
 
 #  levantar servidor
 nohup ./build/bin/llama-server \
-  -m "$HOME/treinamento_llms/tools/quantized_model/Qwen3-8B-base-F16-Q4_K_M.gguf" \
+  -m "$HOME/treinamento_llms/tools/quantized_model/Qwen3-8B-F16-Q5_K_M.gguf" \
   --host 0.0.0.0 \
   --port 8080 \
   -c 8192 \
@@ -95,7 +95,7 @@ ls ~/.cache/huggingface/hub/models--Qwen--Qwen3-8B/snapshots/b968826d9c46dd6066d
 ### Ajusta o caminho ao script e ao modelo, conforme a tua versão de llama.cpp:
 ## 1) Modelo em repositorio HuggingFace no disco
 python ~/treinamento_llms/tools/llama.cpp/convert_hf_to_gguf.py \
-  ~/.cache/huggingface/hub/models--Qwen--Qwen3-8B/snapshots/b968826d9c46dd6066d109eabc6255188de91218/ \
+  ~/.cache/huggingface/hub/models--edufilgueira--meu-qwen3-8b-merged/snapshots/37b3cae49e9f21ee376189bbc6b132dcd3216d67/ \
   --outfile ~/treinamento_llms/tools/quantized_model/Qwen3-8B-F16.gguf \
   --outtype f16
 

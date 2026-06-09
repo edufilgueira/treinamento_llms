@@ -607,6 +607,16 @@ async def page_registar(request: Request):
     return FileResponse(p, media_type="text/html; charset=utf-8")
 
 
+@router.get("/pulso", response_class=HTMLResponse)
+async def page_pulso():
+    p = STATIC_DIR / "pulso.html"
+    if not p.is_file():
+        return HTMLResponse(
+            "<p>Falta server_for_serveless/static/pulso.html</p>", status_code=500
+        )
+    return FileResponse(p, media_type="text/html; charset=utf-8")
+
+
 @router.get("/admin")
 async def page_admin(request: Request):
     uid = request.session.get("user_id")
