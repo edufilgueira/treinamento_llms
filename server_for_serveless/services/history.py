@@ -167,8 +167,8 @@ def session_context_block_text(user_id: int) -> str:
     nome = nome_utilizador_para_modelo(int(user_id))
     data_s = data_atual_para_modelo()
     return (
-        "[Contexto da sessão (não é uma pergunta do utilizador). "
-        f"Nome do interlocutor: «{nome}». Data atual: {data_s}.]"
+        f"baseado no nome atualizado para [{nome}], continuaremos.\n"
+        f"considere que a Data Atual é [{data_s}]"
     )
 
 
