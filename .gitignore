@@ -17,4 +17,6 @@ server/data/.session_secret
 .env
 tools/
 server/.env
+server_for_serveless/.env
+server_for_serveless/backups/
 huggingface.txt
