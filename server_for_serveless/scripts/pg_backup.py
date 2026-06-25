@@ -2,7 +2,7 @@
 """
 Backup completo da base PostgreSQL do Oráculo (utilizadores, chats, app_global).
 
-Usa credenciais de server_for_serveless/.env (via pg_db.get_pg_dsn_dict).
+Usa credenciais de server_for_serveless/.env. Não requer psycopg2 — só pg_dump.
 Requer ``pg_dump`` no PATH (pacote postgresql-client no Linux).
 
 Exemplo:
@@ -13,26 +13,25 @@ Exemplo:
 from __future__ import annotations
 
 import argparse
-import os
 import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-_REPO = Path(__file__).resolve().parent.parent.parent
-if str(_REPO) not in sys.path:
-    sys.path.insert(0, str(_REPO))
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
 
-from server_for_serveless.db.pg_db import get_pg_dsn_dict  # noqa: E402
+from _pg_env import get_pg_dsn_dict, pg_libpq_env  # noqa: E402
 
 
 def _default_out_path() -> Path:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    base = Path(__file__).resolve().parent.parent / "backups"
+    base = _SCRIPT_DIR.parent / "backups"
     base.mkdir(parents=True, exist_ok=True)
-    db = (os.environ.get("ORACULO_PG_DATABASE") or "oraculo").strip() or "oraculo"
-    return base / f"{db}_{stamp}.dump"
+    dsn = get_pg_dsn_dict()
+    return base / f"{dsn['dbname']}_{stamp}.dump"
 
 
 def main() -> None:
@@ -56,9 +55,7 @@ def main() -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
 
     dsn = get_pg_dsn_dict()
-    env = os.environ.copy()
-    if dsn.get("password"):
-        env["PGPASSWORD"] = str(dsn["password"])
+    env = pg_libpq_env()
 
     cmd = [
         "pg_dump",
@@ -75,8 +72,6 @@ def main() -> None:
         "--no-acl",
         f"--file={out}",
     ]
-    if dsn.get("sslmode"):
-        env.setdefault("PGSSLMODE", str(dsn["sslmode"]))
 
     print(f"A ligar a {dsn['host']}:{dsn['port']}/{dsn['dbname']} …", flush=True)
     try:

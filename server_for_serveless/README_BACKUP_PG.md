@@ -20,6 +20,8 @@ Cliente PostgreSQL com `pg_dump` / `pg_restore`:
 sudo apt update && sudo apt install -y postgresql-client
 ```
 
+Os scripts **não precisam** do venv do Oráculo nem de `psycopg2` — só leem `server_for_serveless/.env` e chamam `pg_dump`/`pg_restore`.
+
 ## 1. Fazer backup (no servidor ou num PC com acesso ao PG)
 
 Na raiz do repositório, com `server_for_serveless/.env` configurado:

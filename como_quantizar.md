@@ -8,8 +8,11 @@ https://github.com/ggerganov/llama.cpp
 # levantar servidor llama.cpp
 
 ```bash
+# compilar para CPU
 cmake -B build -DLLAMA_BUILD_SERVER=ON
-cmake --build build -j
+# compilar para GPU
+cmake -B build -DLLAMA_BUILD_SERVER=ON -DGGML_CUDA=ON
+cmake --build build -j"$(nproc)"
 ```
 
 

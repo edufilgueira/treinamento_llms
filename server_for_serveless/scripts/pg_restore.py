@@ -2,8 +2,8 @@
 """
 Restaura backup PostgreSQL do Oráculo (ficheiro gerado por pg_backup.py).
 
-Requer ``pg_restore`` no PATH. A base de destino deve existir (ou use
-ORACULO_PG_AUTO_CREATE_DATABASE=1 e arranque o servidor uma vez).
+Requer ``pg_restore`` no PATH. Não requer psycopg2.
+A base de destino deve existir (ou será criada via psql se possível).
 
 Exemplo:
   python3 server_for_serveless/scripts/pg_restore.py --file server_for_serveless/backups/oraculo_20260527_120000.dump
@@ -18,11 +18,80 @@ import subprocess
 import sys
 from pathlib import Path
 
-_REPO = Path(__file__).resolve().parent.parent.parent
-if str(_REPO) not in sys.path:
-    sys.path.insert(0, str(_REPO))
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
 
-from server_for_serveless.db.pg_db import ensure_target_database, get_pg_dsn_dict  # noqa: E402
+from _pg_env import get_pg_dsn_dict, load_oraculo_env, pg_libpq_env  # noqa: E402
+
+
+def _ensure_target_database_psql() -> None:
+    load_oraculo_env()
+    v = (os.environ.get("ORACULO_PG_AUTO_CREATE_DATABASE") or "1").strip().lower()
+    if v in ("0", "false", "no", "off"):
+        return
+    if not shutil.which("psql"):
+        return
+
+    dsn = get_pg_dsn_dict()
+    target = str(dsn["dbname"])
+    maint = (os.environ.get("ORACULO_PG_MAINTENANCE_DB") or "postgres").strip() or "postgres"
+    if target == maint:
+        return
+
+    env = pg_libpq_env()
+    check = subprocess.run(
+        [
+            "psql",
+            "-h",
+            str(dsn["host"]),
+            "-p",
+            str(dsn["port"]),
+            "-U",
+            str(dsn["user"]),
+            "-d",
+            maint,
+            "-tAc",
+            f"SELECT 1 FROM pg_database WHERE datname = '{target.replace(chr(39), chr(39) + chr(39))}'",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if check.returncode != 0:
+        print(f"Aviso: não foi possível verificar a base {target!r}: {check.stderr.strip()}", file=sys.stderr)
+        return
+    if check.stdout.strip() == "1":
+        return
+
+    create = subprocess.run(
+        [
+            "psql",
+            "-h",
+            str(dsn["host"]),
+            "-p",
+            str(dsn["port"]),
+            "-U",
+            str(dsn["user"]),
+            "-d",
+            maint,
+            "-c",
+            f'CREATE DATABASE "{target.replace(chr(34), chr(34) + chr(34))}"',
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if create.returncode == 0:
+        print(f"PostgreSQL: base {target!r} criada.", flush=True)
+    else:
+        print(
+            f"Aviso: não foi possível criar a base {target!r}. "
+            f"Crie manualmente ou arranque o Oráculo uma vez.\n{create.stderr.strip()}",
+            file=sys.stderr,
+        )
 
 
 def main() -> None:
@@ -66,17 +135,9 @@ def main() -> None:
             print("Cancelado.")
             sys.exit(0)
 
-    try:
-        ensure_target_database()
-    except Exception as err:
-        print(f"Aviso ao garantir base: {err}", file=sys.stderr)
+    _ensure_target_database_psql()
 
-    env = os.environ.copy()
-    if dsn.get("password"):
-        env["PGPASSWORD"] = str(dsn["password"])
-    if dsn.get("sslmode"):
-        env.setdefault("PGSSLMODE", str(dsn["sslmode"]))
-
+    env = pg_libpq_env()
     cmd = [
         "pg_restore",
         "-h",
