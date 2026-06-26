@@ -18,5 +18,4 @@ server/data/.session_secret
 tools/quantized_model/*
 server/.env
 server_for_serveless/.env
-server_for_serveless/backups/
 huggingface.txt
