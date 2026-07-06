@@ -167,8 +167,10 @@ def session_context_block_text(user_id: int) -> str:
     nome = nome_utilizador_para_modelo(int(user_id))
     data_s = data_atual_para_modelo()
     return (
-        f"considere o nome do usuario sendo [{nome}], continue o dialogo.\n"
-        f"considere que a Data Atual é [{data_s}]"
+        "Contexto da sessão:\n"
+        f"- Nome do usuário: {nome}\n"
+        f"- Data atual: {data_s}\n\n"
+        "Continue o diálogo considerando esse contexto."
     )
 
 
